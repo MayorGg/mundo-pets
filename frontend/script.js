@@ -1,8 +1,8 @@
 // URL base del backend (asegúrate de levantar el servidor en este puerto)
 const API_BASE_URL = 'http://localhost:5000';
 
-// Base de datos de productos
-const PRODUCTOS = {
+// Base de datos de productos (fallback local si la API no está disponible)
+const PRODUCTOS_LOCALES = {
   alimentos: [
     { id: 1, nombre: "Croquetas Premium", precio: 45000, descripcion: "Alimento balanceado para perros adultos", imagen: "alimento.jpg", categoria: "Alimentos" },
     { id: 2, nombre: "Comida Húmeda Gatos", precio: 15000, descripcion: "Pate de salmón para gatos", imagen: "alimento.jpg", categoria: "Alimentos" },
@@ -28,6 +28,8 @@ const PRODUCTOS = {
     { id: 16, nombre: "Entrenamiento", precio: 50000, descripcion: "Sesión de entrenamiento básico", imagen: "guarderia.jpg", categoria: "Guardería" }
   ]
 };
+
+let PRODUCTOS = {};
 
 // Calendario laboral Colombia 2026 (festivos oficiales, incl. Ley Emiliani)
 const FESTIVOS_CO_2026 = {
@@ -277,12 +279,58 @@ function renderCalendarioServicio() {
   `;
 }
 
+async function cargarProductos() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/products`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    PRODUCTOS = {};
+    data.forEach(p => {
+      const key = p.categoria
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '');
+      if (!PRODUCTOS[key]) PRODUCTOS[key] = [];
+      PRODUCTOS[key].push({
+        id: p.id,
+        nombre: p.nombre,
+        precio: Number(p.precio),
+        descripcion: p.descripcion,
+        imagen: p.imagen,
+        categoria: p.categoria
+      });
+    });
+  } catch (err) {
+    console.warn('No se pudo cargar productos desde la API, usando catálogo local:', err.message);
+    PRODUCTOS = { ...PRODUCTOS_LOCALES };
+  }
+  actualizarPreciosCatalogo();
+}
+
+function actualizarPreciosCatalogo() {
+  const mapa = {
+    alimentos: 'precio-alimentos',
+    medicamentos: 'precio-medicamentos',
+    peluqueria: 'precio-peluqueria',
+    guarderia: 'precio-guarderia'
+  };
+  Object.keys(mapa).forEach(key => {
+    const el = document.getElementById(mapa[key]);
+    const lista = PRODUCTOS[key];
+    if (!el || !lista || lista.length === 0) return;
+    const min = Math.min(...lista.map(p => p.precio));
+    el.innerHTML = `Desde $${min.toLocaleString()} <span class="font-normal text-muted">· ${lista.length} ${lista.length === 1 ? 'opción' : 'opciones'}</span>`;
+  });
+}
+
 // Verificar si el usuario está autenticado al cargar la página
 document.addEventListener('DOMContentLoaded', function() {
   // Si estamos en dashboard.html, verificar autenticación
   if (window.location.pathname.includes('dashboard.html')) {
     checkAuth();
     actualizarContadorCarrito();
+    cargarProductos();
   }
 });
 
@@ -346,6 +394,8 @@ async function login() {
     // Login exitoso
     localStorage.setItem('authToken', data.token);
     localStorage.setItem('username', data.username || identifier);
+    const role = data.role || 'user';
+    localStorage.setItem('role', role);
 
     Swal.fire({
       icon: 'success',
@@ -354,7 +404,7 @@ async function login() {
       confirmButtonColor: '#28a745',
       confirmButtonText: 'Continuar'
     }).then(() => {
-      window.location.href = 'dashboard.html';
+      window.location.href = role === 'admin' ? 'admin.html' : 'dashboard.html';
     });
   } catch (error) {
     console.error('Error en login:', error);
@@ -465,6 +515,7 @@ function logout() {
       // Limpiar datos de autenticación
       localStorage.removeItem('authToken');
       localStorage.removeItem('username');
+      localStorage.removeItem('role');
 
       Swal.fire({
         icon: 'success',
@@ -485,6 +536,16 @@ function showProducts(categoria) {
   const productsContainer = document.getElementById('productsContainer');
   const productos = PRODUCTOS[categoria];
   const conAgenda = CATEGORIAS_CON_AGENDA.includes(categoria);
+
+  if (!productos || productos.length === 0) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Sin productos',
+      text: 'Esta categoría no tiene productos disponibles por el momento',
+      confirmButtonColor: '#3085d6'
+    });
+    return;
+  }
 
   categoriaServicioActual = conAgenda ? categoria : null;
   fechaServicioSeleccionada = null;
