@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2/promise');
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
@@ -50,13 +51,13 @@ function loginWithJson(identifier, password) {
   return { token, username: user.username, message: 'Inicio de sesión exitoso' };
 }
 
-// Configuración de conexión a MySQL (local: root sin contraseña)
-// Si usas contraseña, cámbiala aquí
+// Configuración de conexión a MySQL (leída desde .env; hay fallback a users.json si no está disponible)
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '',
-  database: 'mundo_pets',
+  host: process.env.DB_HOST || 'localhost',
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'mundo_pets',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0

@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+require('dotenv').config();
 
 const TEMP_USER = {
   username: 'demo',
@@ -8,9 +9,10 @@ const TEMP_USER = {
 
 async function main() {
   const conn = await mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: ''
+    host: process.env.DB_HOST || 'localhost',
+    port: Number(process.env.DB_PORT || 3306),
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || ''
   });
 
   await conn.query(`
