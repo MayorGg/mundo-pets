@@ -66,12 +66,19 @@ let calendarioMes = 7;
 let categoriaServicioActual = null;
 
 // Gestión de modales sin Bootstrap
+const MODALS = ['productsModal', 'cartModal', 'checkoutModal'];
+let lastFocused = null;
+
 function openModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.remove('hidden');
   el.classList.add('flex');
+  el.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
+  lastFocused = document.activeElement;
+  const focusable = el.querySelector('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (focusable) focusable.focus();
 }
 
 function closeModal(id) {
@@ -79,7 +86,62 @@ function closeModal(id) {
   if (!el) return;
   el.classList.add('hidden');
   el.classList.remove('flex');
+  el.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
+  if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+}
+
+// Cerrar modales con Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  MODALS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.classList.contains('hidden')) closeModal(id);
+  });
+});
+
+// Limpiar errores de campo al escribir
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', () => setFieldError(input.id, ''));
+  });
+});
+
+function togglePassword(inputId, iconId) {
+  const input = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  if (!input) return;
+  const esClave = input.type === 'password';
+  input.type = esClave ? 'text' : 'password';
+  if (icon) icon.className = esClave ? 'fas fa-eye-slash' : 'fas fa-eye';
+  const btn = icon && icon.closest('button');
+  if (btn) btn.setAttribute('aria-label', esClave ? 'Ocultar contraseña' : 'Mostrar contraseña');
+}
+
+function setFieldError(inputId, msg) {
+  const input = document.getElementById(inputId);
+  const err = document.getElementById(`${inputId}-err`);
+  if (!input) return;
+  if (msg) {
+    input.classList.add('input-error');
+    if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+  } else {
+    input.classList.remove('input-error');
+    if (err) err.classList.add('hidden');
+  }
+}
+
+function setButtonLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  if (loading) {
+    btn.dataset.original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.original) btn.innerHTML = btn.dataset.original;
+  }
 }
 
 function fechaHoyBogota() {
@@ -242,19 +304,23 @@ function checkAuth() {
 
 // Función de login usando backend
 async function login() {
-  const identifier = document.getElementById('identifier').value;
+  const identifier = document.getElementById('identifier').value.trim();
   const password = document.getElementById('password').value;
 
+  setFieldError('identifier', '');
+  setFieldError('password', '');
+
   // Validaciones del frontend
-  if (!identifier || !password) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: 'Usuario/Email y contraseña son requeridos',
-      confirmButtonColor: '#3085d6'
-    });
+  if (!identifier) {
+    setFieldError('identifier', 'Ingresa tu usuario o correo');
     return;
   }
+  if (!password) {
+    setFieldError('password', 'Ingresa tu contraseña');
+    return;
+  }
+
+  setButtonLoading('loginBtn', true);
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/login`, {
@@ -298,37 +364,48 @@ async function login() {
       text: 'No se pudo conectar con el servidor',
       confirmButtonColor: '#3085d6'
     });
+  } finally {
+    setButtonLoading('loginBtn', false);
   }
 }
 
 // Función de registro usando backend
 async function register() {
-  const username = document.getElementById('newUsername').value;
-  const email = document.getElementById('newEmail').value;
+  const username = document.getElementById('newUsername').value.trim();
+  const email = document.getElementById('newEmail').value.trim();
   const password = document.getElementById('newPassword').value;
 
+  setFieldError('newUsername', '');
+  setFieldError('newEmail', '');
+  setFieldError('newPassword', '');
+
   // Validaciones del frontend
-  if (!username || !email || !password) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: 'Todos los campos son requeridos',
-      confirmButtonColor: '#3085d6'
-    });
+  if (!username) {
+    setFieldError('newUsername', 'Elige un nombre de usuario');
+    return;
+  }
+  if (!email) {
+    setFieldError('newEmail', 'Ingresa tu correo electrónico');
     return;
   }
 
   // Validar formato de email
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: 'Formato de email inválido',
-      confirmButtonColor: '#3085d6'
-    });
+    setFieldError('newEmail', 'Formato de email inválido');
     return;
   }
+
+  if (!password) {
+    setFieldError('newPassword', 'Crea una contraseña');
+    return;
+  }
+  if (password.length < 6) {
+    setFieldError('newPassword', 'La contraseña debe tener al menos 6 caracteres');
+    return;
+  }
+
+  setButtonLoading('registerBtn', true);
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/register`, {
@@ -368,6 +445,8 @@ async function register() {
       text: 'No se pudo conectar con el servidor',
       confirmButtonColor: '#3085d6'
     });
+  } finally {
+    setButtonLoading('registerBtn', false);
   }
 }
 
@@ -416,22 +495,26 @@ function showProducts(categoria) {
     : `<i class="fas fa-boxes mr-2"></i>Productos de ${productos[0].categoria}`;
 
   let productosHTML = '';
+  const bandClass = { alimentos: 'bg-warn', medicamentos: 'bg-danger', peluqueria: 'bg-info', guarderia: 'bg-success' }[categoria] || 'bg-brand';
+  const bandIcon = { alimentos: 'fa-bone', medicamentos: 'fa-pills', peluqueria: 'fa-cut', guarderia: 'fa-home' }[categoria] || 'fa-box';
+
   productos.forEach(producto => {
     const args = conAgenda
       ? `${producto.id}, '${producto.nombre}', ${producto.precio}, true`
       : `${producto.id}, '${producto.nombre}', ${producto.precio}`;
     productosHTML += `
       <div class="product-card h-full">
-        <div class="p-4 text-center">
-          <div class="mb-3 text-brand">
-            <i class="fas fa-box fa-3x"></i>
-          </div>
+        <div class="relative flex h-28 items-center justify-center ${bandClass}">
+          <i class="fas ${bandIcon} fa-3x text-white/85"></i>
+          <span class="absolute top-2 right-3 text-xs font-semibold text-white/90">${producto.categoria}</span>
+        </div>
+        <div class="flex flex-1 flex-col p-4 text-center">
           <h3 class="mb-1 text-lg font-bold text-brand">${producto.nombre}</h3>
           <p class="mb-2 text-sm text-muted">${producto.descripcion}</p>
           <div class="product-price mb-3">
             <span class="text-xl font-bold text-success">$${producto.precio.toLocaleString()}</span>
           </div>
-          <button onclick="agregarAlCarrito(${args})" class="btn-brand-success w-full py-2.5">
+          <button onclick="agregarAlCarrito(${args})" class="btn-brand-success mt-auto w-full py-2.5">
             <i class="fas fa-cart-plus mr-2"></i>${conAgenda ? 'Reservar' : 'Agregar al Carrito'}
           </button>
         </div>
@@ -518,16 +601,16 @@ function showCart() {
               ${item.fecha ? `<p class="mt-1 mb-0 text-sm text-brand"><i class="fas fa-calendar-day mr-1"></i>${formatearFechaCO(item.fecha)}</p>` : ''}
             </div>
             <div class="flex items-center gap-2">
-              <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm">
+              <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Disminuir cantidad de ${item.nombre}">
                 <i class="fas fa-minus"></i>
               </button>
               <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-semibold">${item.cantidad}</span>
-              <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm">
+              <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Aumentar cantidad de ${item.nombre}">
                 <i class="fas fa-plus"></i>
               </button>
             </div>
             <div class="text-center font-bold text-success">$${subtotal.toLocaleString()}</div>
-            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition duration-200 hover:bg-danger hover:text-white">
+            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar ${item.nombre} del carrito">
               <i class="fas fa-trash"></i>
             </button>
           </div>

@@ -31,25 +31,34 @@
               <p class="mb-0 text-muted">Accede a tu cuenta para continuar</p>
             </div>
 
-            <form>
+            <form novalidate>
               <div class="mb-3">
                 <label for="identifier" class="mb-1.5 block text-sm font-semibold text-muted">
                   <i class="fas fa-user mr-2"></i>Usuario o Correo
                 </label>
                 <input type="text" class="input-field w-full px-4 py-3" id="identifier"
-                       placeholder="Ingresa tu usuario o email" required>
+                       placeholder="Ingresa tu usuario o email" autocomplete="username" required>
+                <p id="identifier-err" class="mt-1.5 hidden text-sm font-medium text-danger"></p>
               </div>
 
               <div class="mb-4">
                 <label for="password" class="mb-1.5 block text-sm font-semibold text-muted">
                   <i class="fas fa-lock mr-2"></i>Contraseña
                 </label>
-                <input type="password" class="input-field w-full px-4 py-3" id="password"
-                       placeholder="Ingresa tu contraseña" required>
+                <div class="relative">
+                  <input type="password" class="input-field w-full px-4 py-3 pr-11" id="password"
+                         placeholder="Ingresa tu contraseña" autocomplete="current-password" required>
+                  <button type="button" onclick="togglePassword('password','togglePass')"
+                          class="absolute top-1/2 right-3 -translate-y-1/2 text-muted transition hover:text-brand"
+                          aria-label="Mostrar contraseña" title="Mostrar contraseña">
+                    <i id="togglePass" class="fas fa-eye"></i>
+                  </button>
+                </div>
+                <p id="password-err" class="mt-1.5 hidden text-sm font-medium text-danger"></p>
               </div>
 
               <div class="mb-4">
-                <button type="button" onclick="login()" class="btn-brand w-full px-6 py-3 text-base">
+                <button type="button" id="loginBtn" onclick="login()" class="btn-brand w-full px-6 py-3 text-base">
                   <i class="fas fa-sign-in-alt"></i>Entrar
                 </button>
               </div>
