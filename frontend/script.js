@@ -65,6 +65,23 @@ let fechaServicioSeleccionada = null;
 let calendarioMes = 7;
 let categoriaServicioActual = null;
 
+// Gestión de modales sin Bootstrap
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.classList.add('flex');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('hidden');
+  el.classList.remove('flex');
+  document.body.style.overflow = '';
+}
+
 function fechaHoyBogota() {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',
@@ -166,18 +183,16 @@ function renderCalendarioServicio() {
 
   wrap.innerHTML = `
     <div class="service-calendar">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-          <h3 class="h5 text-primary mb-1">Agenda 2026 · Colombia</h3>
-          <p class="small text-muted mb-0">Elige el día del servicio. Festivos y domingos no están disponibles.</p>
-        </div>
+      <div class="mb-3">
+        <h3 class="mb-1 text-lg font-bold text-brand">Agenda 2026 · Colombia</h3>
+        <p class="mb-0 text-sm text-muted">Elige el día del servicio. Festivos y domingos no están disponibles.</p>
       </div>
       <div class="cal-nav">
-        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="cambiarMesCalendario(-1)" ${calendarioMes === 0 ? 'disabled' : ''}>
+        <button type="button" class="btn-brand-outline px-3 py-1.5 text-sm" onclick="cambiarMesCalendario(-1)" ${calendarioMes === 0 ? 'disabled' : ''}>
           ‹
         </button>
         <strong>${MESES_ES[calendarioMes]} ${anio}</strong>
-        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="cambiarMesCalendario(1)" ${calendarioMes === 11 ? 'disabled' : ''}>
+        <button type="button" class="btn-brand-outline px-3 py-1.5 text-sm" onclick="cambiarMesCalendario(1)" ${calendarioMes === 11 ? 'disabled' : ''}>
           ›
         </button>
       </div>
@@ -194,7 +209,7 @@ function renderCalendarioServicio() {
         <span><i class="cal-swatch cal-swatch-sel"></i> Seleccionado</span>
       </div>
       <p class="cal-selected-label mt-3 mb-0">
-        <i class="fas fa-calendar-check me-2"></i>${fechaTexto}
+        <i class="fas fa-calendar-check mr-2"></i>${fechaTexto}
       </p>
     </div>
   `;
@@ -265,7 +280,7 @@ async function login() {
     // Login exitoso
     localStorage.setItem('authToken', data.token);
     localStorage.setItem('username', data.username || identifier);
-    
+
     Swal.fire({
       icon: 'success',
       title: '¡Bienvenido!',
@@ -371,7 +386,7 @@ function logout() {
       // Limpiar datos de autenticación
       localStorage.removeItem('authToken');
       localStorage.removeItem('username');
-      
+
       Swal.fire({
         icon: 'success',
         title: 'Sesión cerrada',
@@ -387,7 +402,6 @@ function logout() {
 
 // Funciones del catálogo
 function showProducts(categoria) {
-  const modal = new bootstrap.Modal(document.getElementById('productsModal'));
   const modalTitle = document.getElementById('modalTitle');
   const productsContainer = document.getElementById('productsContainer');
   const productos = PRODUCTOS[categoria];
@@ -398,8 +412,8 @@ function showProducts(categoria) {
   calendarioMes = mesInicialCalendario();
 
   modalTitle.innerHTML = conAgenda
-    ? `<i class="fas fa-calendar-alt me-2"></i>${productos[0].categoria} · Reservar fecha`
-    : `<i class="fas fa-boxes me-2"></i>Productos de ${productos[0].categoria}`;
+    ? `<i class="fas fa-calendar-alt mr-2"></i>${productos[0].categoria} · Reservar fecha`
+    : `<i class="fas fa-boxes mr-2"></i>Productos de ${productos[0].categoria}`;
 
   let productosHTML = '';
   productos.forEach(producto => {
@@ -407,37 +421,30 @@ function showProducts(categoria) {
       ? `${producto.id}, '${producto.nombre}', ${producto.precio}, true`
       : `${producto.id}, '${producto.nombre}', ${producto.precio}`;
     productosHTML += `
-      <div class="col-lg-4 col-md-6 col-sm-12">
-        <div class="card product-card h-100 shadow-hover">
-          <div class="card-body text-center p-4">
-            <div class="product-icon mb-3">
-              <i class="fas fa-box fa-3x text-primary"></i>
-            </div>
-            <h3 class="card-title h5 text-primary">${producto.nombre}</h3>
-            <p class="card-text text-muted small">${producto.descripcion}</p>
-            <div class="product-price mb-3">
-              <span class="h4 fw-bold text-success">$${producto.precio.toLocaleString()}</span>
-            </div>
-            <button onclick="agregarAlCarrito(${args})" class="btn btn-success w-100">
-              <i class="fas fa-cart-plus me-2"></i>${conAgenda ? 'Reservar' : 'Agregar al Carrito'}
-            </button>
+      <div class="product-card h-full">
+        <div class="p-4 text-center">
+          <div class="mb-3 text-brand">
+            <i class="fas fa-box fa-3x"></i>
           </div>
+          <h3 class="mb-1 text-lg font-bold text-brand">${producto.nombre}</h3>
+          <p class="mb-2 text-sm text-muted">${producto.descripcion}</p>
+          <div class="product-price mb-3">
+            <span class="text-xl font-bold text-success">$${producto.precio.toLocaleString()}</span>
+          </div>
+          <button onclick="agregarAlCarrito(${args})" class="btn-brand-success w-full py-2.5">
+            <i class="fas fa-cart-plus mr-2"></i>${conAgenda ? 'Reservar' : 'Agregar al Carrito'}
+          </button>
         </div>
       </div>
     `;
   });
 
   productsContainer.innerHTML = conAgenda
-    ? `<div class="col-12" id="calendarWrap"></div><div class="col-12"><div class="row g-4">${productosHTML}</div></div>`
+    ? `<div class="col-span-full" id="calendarWrap"></div><div class="col-span-full grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">${productosHTML}</div>`
     : productosHTML;
 
   if (conAgenda) renderCalendarioServicio();
-  modal.show();
-}
-
-function closeModal() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('productsModal'));
-  if (modal) modal.hide();
+  openModal('productsModal');
 }
 
 // Funciones del carrito
@@ -483,14 +490,13 @@ function actualizarContadorCarrito() {
 }
 
 function showCart() {
-  const modal = new bootstrap.Modal(document.getElementById('cartModal'));
   const cartItems = document.getElementById('cartItems');
   const cartTotal = document.getElementById('cartTotal');
-  
+
   if (carrito.length === 0) {
     cartItems.innerHTML = `
-      <div class="text-center py-5">
-        <i class="fas fa-shopping-cart fa-4x text-muted mb-3"></i>
+      <div class="py-10 text-center">
+        <i class="fas fa-shopping-cart mb-3 text-4xl text-muted"></i>
         <p class="text-muted">Tu carrito está vacío</p>
       </div>
     `;
@@ -498,55 +504,42 @@ function showCart() {
   } else {
     let itemsHTML = '';
     let total = 0;
-    
+
     carrito.forEach(item => {
       const subtotal = item.precio * item.cantidad;
       total += subtotal;
-      
+
       itemsHTML += `
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="row align-items-center">
-              <div class="col-md-4">
-                <h5 class="card-title mb-1">${item.nombre}</h5>
-                <p class="text-muted mb-0">$${item.precio.toLocaleString()} x ${item.cantidad}</p>
-                ${item.fecha ? `<p class="small text-primary mb-0 mt-1"><i class="fas fa-calendar-day me-1"></i>${formatearFechaCO(item.fecha)}</p>` : ''}
-              </div>
-              <div class="col-md-4 text-center">
-                <div class="btn-group" role="group">
-                  <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn btn-outline-primary btn-sm">
-                    <i class="fas fa-minus"></i>
-                  </button>
-                  <span class="btn btn-outline-secondary btn-sm disabled">${item.cantidad}</span>
-                  <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn btn-outline-primary btn-sm">
-                    <i class="fas fa-plus"></i>
-                  </button>
-                </div>
-              </div>
-              <div class="col-md-2 text-center">
-                <span class="h6 text-success">$${subtotal.toLocaleString()}</span>
-              </div>
-              <div class="col-md-2 text-center">
-                <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="btn btn-outline-danger btn-sm">
-                  <i class="fas fa-trash"></i>
-                </button>
-              </div>
+        <div class="mb-3 rounded-card border border-gray-100 bg-white p-4 shadow-sm">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="min-w-0 flex-1">
+              <h5 class="mb-1 font-bold">${item.nombre}</h5>
+              <p class="mb-0 text-muted">$${item.precio.toLocaleString()} x ${item.cantidad}</p>
+              ${item.fecha ? `<p class="mt-1 mb-0 text-sm text-brand"><i class="fas fa-calendar-day mr-1"></i>${formatearFechaCO(item.fecha)}</p>` : ''}
             </div>
+            <div class="flex items-center gap-2">
+              <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm">
+                <i class="fas fa-minus"></i>
+              </button>
+              <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-semibold">${item.cantidad}</span>
+              <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
+            <div class="text-center font-bold text-success">$${subtotal.toLocaleString()}</div>
+            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition duration-200 hover:bg-danger hover:text-white">
+              <i class="fas fa-trash"></i>
+            </button>
           </div>
         </div>
       `;
     });
-    
+
     cartItems.innerHTML = itemsHTML;
     cartTotal.textContent = total.toLocaleString();
   }
-  
-  modal.show();
-}
 
-function closeCartModal() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('cartModal'));
-  if (modal) modal.hide();
+  openModal('cartModal');
 }
 
 function mismaLinea(item, id, fecha) {
@@ -583,56 +576,48 @@ function checkout() {
     });
     return;
   }
-  
-  closeCartModal();
-  
-  const modal = new bootstrap.Modal(document.getElementById('checkoutModal'));
+
+  closeModal('cartModal');
+
   const checkoutSummary = document.getElementById('checkoutSummary');
-  
+
   // Generar resumen de la compra
   let summaryHTML = '';
   let total = 0;
-  
+
   carrito.forEach(item => {
     const subtotal = item.precio * item.cantidad;
     total += subtotal;
-    
+
     summaryHTML += `
-      <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-        <span class="fw-medium">${item.nombre} x ${item.cantidad}${item.fecha ? `<br><small class="text-muted">${formatearFechaCO(item.fecha)}</small>` : ''}</span>
-        <span class="text-success fw-bold">$${subtotal.toLocaleString()}</span>
+      <div class="flex items-center justify-between gap-2 border-b border-gray-200 py-2">
+        <span class="font-medium">${item.nombre} x ${item.cantidad}${item.fecha ? `<br><small class="text-muted">${formatearFechaCO(item.fecha)}</small>` : ''}</span>
+        <span class="font-bold text-success">$${subtotal.toLocaleString()}</span>
       </div>
     `;
   });
-  
+
   summaryHTML += `
-    <div class="d-flex justify-content-between align-items-center py-3 border-top mt-3">
-      <span class="h5 mb-0 text-primary">Total:</span>
-      <span class="h4 mb-0 text-success fw-bold">$${total.toLocaleString()}</span>
+    <div class="mt-3 flex items-center justify-between border-t border-gray-200 pt-3">
+      <span class="text-lg font-bold text-brand">Total:</span>
+      <span class="text-xl font-bold text-success">$${total.toLocaleString()}</span>
     </div>
   `;
-  
-  checkoutSummary.innerHTML = summaryHTML;
-  modal.show();
-}
 
-function closeCheckoutModal() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('checkoutModal'));
-  if (modal) modal.hide();
+  checkoutSummary.innerHTML = summaryHTML;
+  openModal('checkoutModal');
 }
 
 function selectPayment(metodo) {
   metodoPagoSeleccionado = metodo;
-  
+
   // Remover selección previa
   document.querySelectorAll('.payment-btn').forEach(btn => {
-    btn.classList.remove('btn-primary');
-    btn.classList.add('btn-outline-primary');
+    btn.classList.remove('payment-selected');
   });
-  
+
   // Seleccionar botón actual
-  event.target.closest('.payment-btn').classList.remove('btn-outline-primary');
-  event.target.closest('.payment-btn').classList.add('btn-primary');
+  event.target.closest('.payment-btn').classList.add('payment-selected');
 }
 
 function processPayment() {
@@ -645,9 +630,9 @@ function processPayment() {
     });
     return;
   }
-  
+
   const total = carrito.reduce((total, item) => total + (item.precio * item.cantidad), 0);
-  
+
   Swal.fire({
     icon: 'info',
     title: 'Procesando Pago',
@@ -665,28 +650,12 @@ function processPayment() {
     }).then(() => {
       // Limpiar carrito
       carrito = [];
+      metodoPagoSeleccionado = null;
       actualizarContadorCarrito();
-      closeCheckoutModal();
-      
+      closeModal('checkoutModal');
+
       // Redirigir al dashboard
       window.location.href = 'dashboard.html';
     });
   });
-}
-
-// Cerrar modales al hacer clic fuera de ellos
-window.onclick = function(event) {
-  const productsModal = document.getElementById('productsModal');
-  const cartModal = document.getElementById('cartModal');
-  const checkoutModal = document.getElementById('checkoutModal');
-  
-  if (event.target === productsModal) {
-    productsModal.style.display = 'none';
-  }
-  if (event.target === cartModal) {
-    cartModal.style.display = 'none';
-  }
-  if (event.target === checkoutModal) {
-    checkoutModal.style.display = 'none';
-  }
 }
