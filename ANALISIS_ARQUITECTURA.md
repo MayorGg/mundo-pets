@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 2 de septiembre de 2026 — Fase 0 de seguridad (contraseñas con bcrypt, JWT con expiración y refresh, CORS restringido, rate limiting).  
+> **Última actualización:** 2 de septiembre de 2026 — Fase 0 de seguridad (bcrypt, JWT + refresh, CORS, rate limiting) y Fase Infraestructura (helmet, compression, cache-control, PM2, backups, Nginx/Let's Encrypt).  
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -36,6 +36,7 @@ mundo pets/
 ├── README.md
 ├── LICENSE
 ├── ANALISIS_ARQUITECTURA.md
+├── ecosystem.config.js   (PM2)
 ├── backend/
 │   ├── package.json
 │   ├── server.js
@@ -44,6 +45,8 @@ mundo pets/
 │   ├── seed-temp-user.js
 │   ├── migrate-passwords.js
 │   ├── users.json
+│   ├── .env.example
+│   ├── .env.production    (plantilla; no versionado en uso real)
 │   └── .env              (no versionado)
 ├── frontend/
 │   ├── index.html
@@ -51,10 +54,18 @@ mundo pets/
 │   ├── register.html
 │   ├── dashboard.html
 │   ├── admin.html
+│   ├── favicon.svg
 │   ├── script.js
 │   ├── admin.js
 │   ├── src/input.css
 │   └── dist/tailwind.css
+├── scripts/
+│   └── backup-db.ps1
+├── deploy/
+│   ├── nginx-mundo-pets.conf
+│   └── DEPLOY.md
+├── backups/              (no versionado)
+├── logs/                 (no versionado)
 └── img/
 ```
 
@@ -68,7 +79,10 @@ mundo pets/
 | [backend/seed-temp-user.js](backend/seed-temp-user.js) | Alta de un usuario temporal en MySQL |
 | [backend/migrate-passwords.js](backend/migrate-passwords.js) | Migra contraseñas en texto plano a hash bcrypt (MySQL y `users.json`) |
 | [backend/users.json](backend/users.json) | Base de usuarios usada únicamente cuando MySQL falla en login/registro; contraseñas hasheadas |
-| [backend/.env](backend/.env) | Configuración local (BD, JWT, CORS); no versionado |
+| [backend/.env](backend/.env) | Configuración local (BD, JWT, CORS, PORT); no versionado |
+| [backend/.env.example](backend/.env.example) | Plantilla documentada de variables de entorno |
+| [backend/.env.production](backend/.env.production) | Plantilla de producción; no versionado en uso real |
+| [frontend/favicon.svg](frontend/favicon.svg) | Favicon de la marca (SVG) |
 | [frontend/index.html](frontend/index.html) | Página de bienvenida y enlaces a autenticación |
 | [frontend/login.html](frontend/login.html) | Formulario de inicio de sesión |
 | [frontend/register.html](frontend/register.html) | Formulario de registro |
@@ -77,24 +91,37 @@ mundo pets/
 | [frontend/script.js](frontend/script.js) | Estado y comportamiento del dashboard, autenticación cliente, catálogo, calendario y carrito |
 | [frontend/admin.js](frontend/admin.js) | Consumo de API administrativa, tablas, formularios y modales CRUD |
 | [frontend/src/input.css](frontend/src/input.css) | Fuente CSS de Tailwind y estilos propios |
+| [ecosystem.config.js](ecosystem.config.js) | Configuración del supervisor de procesos PM2 |
+| [scripts/backup-db.ps1](scripts/backup-db.ps1) | Backup automático de MySQL (mysqldump + retención) |
+| [deploy/nginx-mundo-pets.conf](deploy/nginx-mundo-pets.conf) | Reverse proxy Nginx con TLS/Let's Encrypt (plantilla) |
+| [deploy/DEPLOY.md](deploy/DEPLOY.md) | Guía de despliegue en producción |
 | [img/](img/) | Recursos gráficos servidos por Express |
 
-El directorio `frontend/dist/` no forma parte del inventario inicial del repositorio mostrado; el CSS final se genera con el script `build:css`.
+`frontend/dist/tailwind.css` se genera con el script `build:css` y está versionado en el repositorio. `backups/`, `logs/` y los `.env` reales no se versionan.
 
 ## 3. Arquitectura de ejecución
 
 ```mermaid
 flowchart LR
-    Browser[ navegador ] -->|HTTP :5000| Express[backend/server.js]
+    subgraph Producción (desplegado)
+        Internet[Internet] -->|HTTPS 443| Nginx[Nginx reverse proxy]
+        Nginx -->|HTTP 5000| PM2[PM2 supervisor]
+        PM2 --> Express[backend/server.js]
+    end
+    subgraph Desarrollo local
+        BrowserLocal[navegador] -->|HTTP :5000| ExpressLocal[backend/server.js]
+    end
     Express -->|sirve HTML, JS y CSS| Browser
     Express -->|/api/*| API[API REST]
-    API --> Auth[JWT y middleware de roles]
+    API --> Auth[JWT, roles, helmet, rate limiting]
     API --> Pool[Pool mysql2/promise]
     Pool --> DB[(MySQL mundo_pets)]
     Auth -.si MySQL no responde.-> JSON[users.json]
     Browser --> Local[estado local: localStorage y memoria]
     CDN[CDN externos] --> Browser
 ```
+
+En desarrollo el navegador llega directo al puerto `5000`. En producción, Nginx termina TLS y hace proxy a `127.0.0.1:5000`, y PM2 mantiene vivo el proceso (reinicio automático y logs centralizados en `logs/`).
 
 ### Flujo de una petición
 
@@ -117,9 +144,17 @@ El servidor expone también `/img` como alias para la carpeta raíz `img/`.
 - `jsonwebtoken` `^9.0.2` para emitir y validar tokens (con expiración y refresh).
 - `bcryptjs` `^3.0.3` para hash y verificación de contraseñas.
 - `express-rate-limit` `^8.7.0` para limitar intentos en login y registro.
+- `helmet` `^8.3.0` para cabeceras HTTP de seguridad (CSP configurada para el frontend vanilla).
+- `compression` `^1.8.1` para compresión gzip de respuestas.
 - `cors` `^2.8.5` para permitir peticiones cross-origin de orígenes restringidos.
-- `dotenv` `^17.4.2` para cargar configuración desde `.env`.
+- `dotenv` `^17.4.2` para cargar configuración desde `.env` / `.env.production` según `NODE_ENV`.
 - CommonJS (`require` y `module` implícito), no TypeScript.
+
+Otros componentes de infraestructura (no son dependencias npm):
+
+- **PM2** como supervisor de procesos (config en `ecosystem.config.js`).
+- **Nginx** como reverse proxy y terminador TLS (plantilla en `deploy/nginx-mundo-pets.conf`).
+- **Let's Encrypt / certbot** para certificados HTTPS (guía en `deploy/DEPLOY.md`).
 
 ### Frontend
 
@@ -129,7 +164,7 @@ El servidor expone también `/img` como alias para la carpeta raíz `img/`.
 - SweetAlert2 11 desde CDN para alertas, confirmaciones y mensajes.
 - Google Fonts: Outfit y Playfair Display.
 
-Los manifiestos están en [backend/package.json](backend/package.json) y [frontend/package.json](frontend/package.json). El backend no declara scripts npm; se inicia directamente con `node server.js`.
+Los manifiestos están en [backend/package.json](backend/package.json) y [frontend/package.json](frontend/package.json). El backend no declara scripts npm; se inicia con `node server.js` o bajo PM2 (`ecosystem.config.js`).
 
 ## 5. Instalación y ejecución local
 
@@ -151,6 +186,14 @@ node server.js
 
 El servidor escucha en `http://localhost:5000`.
 
+En desarrollo/despliegue se puede iniciar bajo el supervisor PM2 (reinicio automático y logs en `logs/`):
+
+```bash
+pm2 start ecosystem.config.js      # desarrollo
+pm2 start ecosystem.config.js --env production
+pm2 status / pm2 logs mundo-pets
+```
+
 Como alternativa, se puede ejecutar el esquema SQL de [backend/setup-db.sql](backend/setup-db.sql) directamente y después iniciar el servidor.
 
 ### Frontend y CSS
@@ -171,10 +214,17 @@ El comando compila `src/input.css` en `dist/tailwind.css`. Las páginas esperan 
 
 ### Variables de entorno
 
-El backend carga `.env` y usa estos valores:
+El backend carga variables según el ambiente (`NODE_ENV`):
+
+- `development` (o sin definir) → `backend/.env`.
+- `production` → `backend/.env.production`.
+
+Las plantillas están en [backend/.env.example](backend/.env.example) y [backend/.env.production](backend/.env.production). Variables usadas:
 
 | Variable | Valor predeterminado | Uso |
 |---|---|---|
+| `NODE_ENV` | `development` | Ambiente; selecciona el archivo de entorno |
+| `PORT` | `5000` | Puerto HTTP en el que escucha Express |
 | `DB_HOST` | `localhost` | Servidor MySQL |
 | `DB_PORT` | `3306` | Puerto MySQL |
 | `DB_USER` | `root` | Usuario MySQL |
@@ -185,7 +235,7 @@ El backend carga `.env` y usa estos valores:
 | `REFRESH_EXPIRES_IN` | `7d` | Vida del refresh token |
 | `CORS_ORIGIN` | `http://localhost:5000` | Orígenes permitidos por CORS, separados por coma |
 
-El puerto HTTP del servidor está fijado en `5000` dentro de `server.js`; no se configura mediante variable de entorno.
+El puerto HTTP ya no es fijo: Express escucha en `process.env.PORT || 5000`.
 
 ## 6. Páginas y navegación
 
@@ -432,7 +482,7 @@ Estos hallazgos describen el estado actual. Los puntos 1, 2, 3, 5 y 6 se resolvi
 1. ~~**Contraseñas en texto plano**~~ **Resuelto:** se almacenan y comparan con hash bcrypt (cost 10) en MySQL y `users.json`; `backend/migrate-passwords.js` migra datos legacy y el login auto-migra contraseñas viejas.
 2. ~~**Secreto JWT fijo y expuesto**~~ **Resuelto:** el secreto se lee de `JWT_SECRET` en `.env` (sin fallback fijo en el código).
 3. ~~**CORS abierto**~~ **Resuelto:** `CORS_ORIGIN` restringe orígenes; los no permitidos reciben `403`.
-4. **Sin HTTPS configurado:** las credenciales y tokens necesitan transporte seguro fuera del entorno local.
+4. **HTTPS no activo aún:** las credenciales y tokens necesitan transporte seguro fuera del entorno local. La config de Nginx + Let's Encrypt ya está preparada en `deploy/` (ver sección 17), pero falta activarla en un servidor real.
 5. ~~**Sin rate limiting**~~ **Resuelto:** login y registro limitados a 20 intentos / 15 min (`429`).
 6. ~~**Tokens sin expiración explícita**~~ **Resuelto:** access token 2h + refresh token 7d con `POST /api/auth/refresh`; `requireAuth` rechaza refresh tokens.
 7. **Fallback inconsistente:** si falla MySQL, solo autenticación cambia a JSON; el catálogo continúa fallando.
@@ -498,7 +548,7 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 
 1. ~~Hashear contraseñas y retirar las credenciales de desarrollo del código y de archivos versionados~~ **Hecho** (bcrypt + migración + `.env` gitignoreado).
 2. ~~Mover el secreto JWT a una variable de entorno fuerte, definir expiración y diseñar renovación~~ **Hecho** (`JWT_SECRET` en `.env`, access 2h, refresh 7d, `POST /api/auth/refresh`).
-3. Restringir CORS y servir la aplicación mediante HTTPS. **CORS hecho** (`CORS_ORIGIN`); **HTTPS pendiente**.
+3. Restringir CORS y servir la aplicación mediante HTTPS. **CORS hecho** (`CORS_ORIGIN`); **HTTPS en preparación** (config Nginx + Let's Encrypt en `deploy/`, pendiente de activar).
 4. Crear entidades y endpoints para pedidos, líneas de pedido, pagos y reservas.
 5. Validar disponibilidad y precios en backend antes de confirmar una compra.
 
@@ -507,7 +557,7 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 1. Sustituir la relación textual de productos por una clave foránea a categorías.
 2. Unificar códigos HTTP y formato de errores.
 3. ~~Añadir rate limiting~~ **Hecho** en login/registro; pendiente auditoría administrativa y validación de entrada más estricta.
-4. Externalizar la URL de la API y el año/calendario de servicios.
+4. Externalizar la URL de la API y el año/calendario de servicios. **Nota:** `API_BASE_URL = 'http://localhost:5000'` está hardcodeado en `script.js`/`admin.js` y hoy convive con la CSP y `CORS_ORIGIN` de desarrollo; en producción debe resolverse por el mismo origen o ajustar CSP/CORS (ver sección 17).
 5. Añadir pruebas automatizadas para autenticación, autorización, CRUD y reglas de fechas.
 
 ### Prioridad de evolución funcional
@@ -525,3 +575,51 @@ Mundo Pets es actualmente un prototipo funcional de comercio y servicios para ma
 Su principal límite arquitectónico es que el recorrido comercial termina en el navegador: no hay persistencia de carrito, reservas, pedidos ni pagos. Por tanto, debe considerarse una aplicación de catálogo con checkout simulado, no todavía una plataforma transaccional completa.
 
 En la última iteración se endureció la base de seguridad: contraseñas hasheadas con bcrypt, secreto JWT externo con expiración y refresh token, CORS restringido y rate limiting en autenticación. El siguiente paso recomendado es llevar la confirmación de compras y reservas al backend (pedidos, pagos y disponibilidad), completar HTTPS y normalizar los códigos HTTP.
+
+## 17. Infraestructura y producción (Fase Infraestructura)
+
+Cambios orientados a que el proyecto pueda salir de `localhost`. La seguridad (Fase 0) se documenta en las secciones 9, 11 y 12; aquí se cubre lo de despliegue y transporte.
+
+### Cabeceras y compresión (`backend/server.js`)
+
+- **helmet** agrega cabeceras de seguridad: CSP, `X-Content-Type-Options`, `X-Frame-Options`, etc. La CSP se configuró para no romper el frontend vanilla: `script-src` y `script-src-attr` incluyen `'unsafe-inline'` (los `onclick` inline), se permiten los CDN de SweetAlert2/Font Awesome/Google Fonts, y `upgrade-insecure-requests` está desactivado para no romper el desarrollo por HTTP.
+- **compression** aplica gzip a las respuestas (`Content-Encoding: gzip`).
+
+### Cache-Control en estáticos
+
+| Tipo de recurso | Cabecera |
+|---|---|
+| HTML (`.html`) | `no-cache` |
+| CSS, JS, SVG, imágenes, fuentes (versionados con `?v=`) | `public, max-age=31536000, immutable` |
+| Resto | `public, max-age=3600` |
+
+Los assets se versionan con parámetro `?v=` en las cinco páginas (`dist/tailwind.css?v=1`, `script.js?v=1`, `admin.js?v=1`). **Al modificar un asset hay que subir la versión** para invalidar la caché del navegador.
+
+### Entorno por ambiente
+
+`server.js` carga `backend/.env` en desarrollo o `backend/.env.production` en producción según `NODE_ENV`. El puerto es configurable con `PORT` (por defecto 5000). Plantillas en `.env.example` y `.env.production`; los `.env` reales no se versionan (`.gitignore`).
+
+### Supervisor de procesos: PM2
+
+- Config en [ecosystem.config.js](ecosystem.config.js): app `mundo-pets`, `autorestart: true`, `max_restarts: 10`, reinicio con retardo, límite de memoria 512 MB, logs en `logs/pm2-*.log`.
+- `pm2 start ecosystem.config.js` (o `--env production`). PM2 reinicia la app si el proceso cae; `pm2 startup` lo deja arrancando con el sistema.
+- Verificado localmente: al matar el proceso node, PM2 lo levanta de nuevo.
+
+### Backups de MySQL
+
+- [scripts/backup-db.ps1](scripts/backup-db.ps1) lee credenciales de `backend/.env`, ejecuta `mysqldump` (con `--single-transaction --routines`) hacia `backups/`, conserva los últimos 14 dumps y evita exponer la contraseña (usa `MYSQL_PWD` y la limpia al terminar).
+- En Windows se registró la tarea programada `MundoPetsBackup` (diaria 03:00); en Linux la guía usa `crontab`. Los dumps no se versionan.
+
+### Reverse proxy y HTTPS
+
+- [deploy/nginx-mundo-pets.conf](deploy/nginx-mundo-pets.conf): Nginx termina TLS (Let's Encrypt), redirige HTTP→HTTPS, comprime respuestas y hace proxy a `127.0.0.1:5000` con `X-Forwarded-*`.
+- [deploy/DEPLOY.md](deploy/DEPLOY.md): pasos de despliegue (DNS, MySQL, PM2, nginx, certbot, firewall, backups).
+- El HTTPS aún **no está activo** en un servidor real; la configuración y la guía están preparadas.
+
+### Otros
+
+- **favicon:** `frontend/favicon.svg` (huella dorada sobre teal) enlazado en las 5 páginas; `GET /favicon.ico` redirige al SVG para evitar el 404.
+
+### Pendiente identificado
+
+- `script.js` y `admin.js` tienen `API_BASE_URL = 'http://localhost:5000'` hardcodeado. En producción con HTTPS y la CSP/CORS actuales, la API debería servirse por el mismo origen (sin hardcode) o ajustarse la CSP y `CORS_ORIGIN`. Está pendiente de externalizar la URL de la API.

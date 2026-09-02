@@ -7,10 +7,36 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+const compression = require('compression');
 const mysql = require('mysql2/promise');
-require('dotenv').config();
+
+// Cargar variables de entorno según ambiente (dev -> .env, prod -> .env.production)
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const ENV_FILE = NODE_ENV === 'production' ? '.env.production' : '.env';
+require('dotenv').config({ path: path.join(__dirname, ENV_FILE) });
 
 const app = express();
+
+// Headers de seguridad básicos (helmet) con CSP que no rompe el frontend vanilla
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com', "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com', "'unsafe-inline'"],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com', 'data:'],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'", 'http://localhost:5000'],
+      upgradeInsecureRequests: null
+    }
+  },
+  crossOriginEmbedderPolicy: false
+}));
+
+// Compresión gzip/brotli de respuestas
+app.use(compression());
 
 // CORS restringido a orígenes reales (desde .env, separados por coma)
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5000')
@@ -50,12 +76,33 @@ const registerLimiter = rateLimit({
   message: { error: 'Demasiados intentos de registro. Intenta de nuevo en unos minutos.' }
 });
 
-// Servir el frontend (páginas HTML, CSS, JS)
+// Servir el frontend (páginas HTML, CSS, JS) con Cache-Control correcto:
+// - HTML: no-cache (se revalida siempre)
+// - CSS/JS/imágenes/iconos versionados: cache largo inmutable
+// - resto: cache corta
 const frontendPath = path.join(__dirname, '..', 'frontend');
-app.use(express.static(frontendPath));
+app.use(express.static(frontendPath, {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else if (/\.(css|js|svg|webp|jpe?g|png|ico|woff2?|ttf|eot)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  }
+}));
 
 // Servir imágenes (fondo Mundo Pet, etc.)
-app.use('/img', express.static(path.join(__dirname, '..', 'img')));
+app.use('/img', express.static(path.join(__dirname, '..', 'img'), {
+  setHeaders(res, filePath) {
+    if (/\.(webp|jpe?g|png|svg|gif|avif)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  }
+}));
 
 // Favicon: los navegadores piden /favicon.ico por defecto; redirigir al SVG
 app.get('/favicon.ico', (req, res) => res.redirect('/favicon.svg'));
@@ -597,7 +644,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
   }
 });
 
-app.listen(5000, () => {
-  console.log('Servidor corriendo en http://localhost:5000');
+app.listen(Number(process.env.PORT || 5000), () => {
+  console.log(`Servidor corriendo en http://localhost:${process.env.PORT || 5000} (env: ${NODE_ENV})`);
 });
 
