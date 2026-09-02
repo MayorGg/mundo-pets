@@ -3,13 +3,52 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+
+// CORS restringido a orígenes reales (desde .env, separados por coma)
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5000')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+// Bloquear orígenes no permitidos antes de CORS (403 limpio)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin || allowedOrigins.includes(origin)) return next();
+  return res.status(403).json({ error: 'Origen no permitido por CORS' });
+});
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
+
+// Secreto JWT desde variable de entorno (sin fallback fijo en el código)
+const SECRET = process.env.JWT_SECRET || (() => {
+  console.warn('ADVERTENCIA: JWT_SECRET no está definido. Usando un secreto temporal que invalida los tokens al reiniciar.');
+  return crypto.randomBytes(64).toString('hex');
+})();
+const ACCESS_EXPIRES = process.env.JWT_EXPIRES_IN || '2h';
+const REFRESH_EXPIRES = process.env.REFRESH_EXPIRES_IN || '7d';
+
+// Rate limiting en rutas de autenticación (20 intentos cada 15 min)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
+});
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos de registro. Intenta de nuevo en unos minutos.' }
+});
 
 // Servir el frontend (páginas HTML, CSS, JS)
 const frontendPath = path.join(__dirname, '..', 'frontend');
@@ -18,7 +57,9 @@ app.use(express.static(frontendPath));
 // Servir imágenes (fondo Mundo Pet, etc.)
 app.use('/img', express.static(path.join(__dirname, '..', 'img')));
 
-const SECRET = 'clave_secreta';
+// Favicon: los navegadores piden /favicon.ico por defecto; redirigir al SVG
+app.get('/favicon.ico', (req, res) => res.redirect('/favicon.svg'));
+
 const USERS_FILE = path.join(__dirname, 'users.json');
 
 function loadUsers() {
@@ -30,26 +71,61 @@ function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
+function esHashBcrypt(pwd) {
+  return typeof pwd === 'string' && pwd.startsWith('$2');
+}
+
+function signAccessToken(payload) {
+  return jwt.sign(payload, SECRET, { expiresIn: ACCESS_EXPIRES });
+}
+
+function signRefreshToken(payload) {
+  return jwt.sign({ ...payload, tokenType: 'refresh' }, SECRET, { expiresIn: REFRESH_EXPIRES });
+}
+
+function tokenResponse(user) {
+  const payload = { id: user.id, username: user.username, role: user.role || 'user' };
+  return {
+    token: signAccessToken(payload),
+    refreshToken: signRefreshToken(payload),
+    username: user.username,
+    role: payload.role,
+    message: user.message || 'OK'
+  };
+}
+
 function registerWithJson(username, email, password) {
   const users = loadUsers();
   if (users.some(u => u.username === username || u.email === email)) {
     return { error: 'El nombre de usuario o email ya está registrado' };
   }
-  users.push({ username, email, password, role: 'user' });
+  const hash = bcrypt.hashSync(password, 10);
+  users.push({ username, email, password: hash, role: 'user' });
   saveUsers(users);
-  const token = jwt.sign({ username, role: 'user' }, SECRET);
-  return { token, username, role: 'user', message: 'Usuario registrado exitosamente' };
+  return tokenResponse({ username, role: 'user' });
 }
 
 function loginWithJson(identifier, password) {
   const users = loadUsers();
   const user = users.find(
-    u => (u.username === identifier || u.email === identifier) && u.password === password
+    u => (u.username === identifier || u.email === identifier)
   );
   if (!user) return { error: 'Credenciales inválidas' };
+
+  const ok = esHashBcrypt(user.password)
+    ? bcrypt.compareSync(password, user.password)
+    : user.password === password; // migración: contraseña en texto plano
+
+  if (!ok) return { error: 'Credenciales inválidas' };
+
+  // Migrar a hash si venía en texto plano
+  if (!esHashBcrypt(user.password)) {
+    user.password = bcrypt.hashSync(user.password, 10);
+    saveUsers(users);
+  }
+
   const role = user.role || 'user';
-  const token = jwt.sign({ username: user.username, role }, SECRET);
-  return { token, username: user.username, role, message: 'Inicio de sesión exitoso' };
+  return tokenResponse({ id: user.id, username: user.username, role });
 }
 
 // Configuración de conexión a MySQL (leída desde .env; hay fallback a users.json si no está disponible)
@@ -70,7 +146,11 @@ function requireAuth(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'No autorizado' });
   try {
-    req.user = jwt.verify(token, SECRET);
+    const decoded = jwt.verify(token, SECRET);
+    if (decoded.tokenType === 'refresh') {
+      return res.status(401).json({ error: 'Token de refresco no válido para esta operación' });
+    }
+    req.user = decoded;
     next();
   } catch {
     return res.status(401).json({ error: 'Token inválido o expirado' });
@@ -85,6 +165,22 @@ function requireAdmin(req, res, next) {
     next();
   });
 }
+
+// Renovar el access token con un refresh token válido
+app.post('/api/auth/refresh', (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).json({ error: 'Falta el refresh token' });
+  try {
+    const decoded = jwt.verify(refreshToken, SECRET);
+    if (decoded.tokenType !== 'refresh') {
+      return res.status(401).json({ error: 'Token inválido' });
+    }
+    const payload = { id: decoded.id, username: decoded.username, role: decoded.role || 'user' };
+    res.json({ token: signAccessToken(payload), role: payload.role });
+  } catch {
+    return res.status(401).json({ error: 'Refresh token inválido o expirado' });
+  }
+});
 
 function productoParams(req) {
   const { nombre, categoria, precio, descripcion, imagen, requiere_fecha, activo } = req.body;
@@ -407,7 +503,7 @@ app.delete('/api/admin/products/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', registerLimiter, async (req, res) => {
   const { username, email, password } = req.body;
   
   // Validaciones
@@ -436,14 +532,15 @@ app.post('/api/register', async (req, res) => {
         return res.json({ error: 'El nombre de usuario o email ya está registrado' });
       }
 
+      const hash = bcrypt.hashSync(password, 10);
+
       // Crear nuevo usuario
       const [insertResult] = await conn.query(
         'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
-        [username, email, password, 'user']
+        [username, email, hash, 'user']
       );
 
-      const token = jwt.sign({ id: insertResult.insertId, username, role: 'user' }, SECRET);
-      res.json({ token, username, role: 'user', message: 'Usuario registrado exitosamente' });
+      res.json(tokenResponse({ id: insertResult.insertId, username, role: 'user' }));
     } finally {
       conn.release();
     }
@@ -455,7 +552,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', loginLimiter, async (req, res) => {
   const { identifier, password } = req.body;
   
   if (!identifier || !password) {
@@ -467,8 +564,8 @@ app.post('/api/login', async (req, res) => {
     try {
       // Buscar usuario por username o email
       const [rows] = await conn.query(
-        'SELECT id, username, email, password, role FROM users WHERE (username = ? OR email = ?) AND password = ? LIMIT 1',
-        [identifier, identifier, password]
+        'SELECT id, username, email, password, role FROM users WHERE (username = ? OR email = ?) LIMIT 1',
+        [identifier, identifier]
       );
 
       if (rows.length === 0) {
@@ -476,9 +573,19 @@ app.post('/api/login', async (req, res) => {
       }
 
       const user = rows[0];
-      const role = user.role || 'user';
-      const token = jwt.sign({ id: user.id, username: user.username, role }, SECRET);
-      res.json({ token, username: user.username, role, message: 'Inicio de sesión exitoso' });
+
+      // Verificar contraseña (hash o texto plano legacy)
+      const ok = esHashBcrypt(user.password)
+        ? bcrypt.compareSync(password, user.password)
+        : user.password === password;
+      if (!ok) return res.json({ error: 'Credenciales inválidas' });
+
+      // Migrar a hash si venía en texto plano
+      if (!esHashBcrypt(user.password)) {
+        await conn.query('UPDATE users SET password = ? WHERE id = ?', [bcrypt.hashSync(user.password, 10), user.id]);
+      }
+
+      res.json(tokenResponse(user));
     } finally {
       conn.release();
     }
@@ -493,3 +600,4 @@ app.post('/api/login', async (req, res) => {
 app.listen(5000, () => {
   console.log('Servidor corriendo en http://localhost:5000');
 });
+

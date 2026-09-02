@@ -2,16 +2,16 @@
   {
     "username": "demo",
     "email": "demo@mundo-pets.com",
-    "password": "demo123"
+    "password": "$2b$10$H4q51lzxkgm4WlT/D7kYRuTmDLAadyyGXQ6UBsqKApzXgAP6kzx7e"
   },
   {
     "username": "admin",
     "email": "admin@test.com",
-    "password": "123456"
+    "password": "$2b$10$Kjg5kwXo0pkUKaT/zQ6L7OlOiMwZLhu6qRdgZ8d/WT7yn7RTxJai6"
   },
   {
     "username": "temp",
     "email": "temp@mundo-pets.com",
-    "password": "temp123"
+    "password": "$2b$10$p1JmBxdX/R5tJbBGHbcS/O7MwUCHhwoQvQ8.2HDRTmuKkPVx6E4Di"
   }
 ]

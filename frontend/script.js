@@ -393,6 +393,7 @@ async function login() {
 
     // Login exitoso
     localStorage.setItem('authToken', data.token);
+    if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
     localStorage.setItem('username', data.username || identifier);
     const role = data.role || 'user';
     localStorage.setItem('role', role);
@@ -514,6 +515,7 @@ function logout() {
     if (result.isConfirmed) {
       // Limpiar datos de autenticación
       localStorage.removeItem('authToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('username');
       localStorage.removeItem('role');
 

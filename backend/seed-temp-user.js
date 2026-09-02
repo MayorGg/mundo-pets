@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 const TEMP_USER = {
@@ -38,13 +39,13 @@ async function main() {
   if (existing.length === 0) {
     await conn.query(
       'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-      [TEMP_USER.username, TEMP_USER.email, TEMP_USER.password]
+      [TEMP_USER.username, TEMP_USER.email, bcrypt.hashSync(TEMP_USER.password, 10)]
     );
     console.log('Usuario temporal creado.');
   } else {
     await conn.query(
       'UPDATE users SET password = ? WHERE username = ?',
-      [TEMP_USER.password, TEMP_USER.username]
+      [bcrypt.hashSync(TEMP_USER.password, 10), TEMP_USER.username]
     );
     console.log('Usuario temporal ya existía; contraseña actualizada.');
   }

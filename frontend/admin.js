@@ -15,17 +15,41 @@ function esc(str) {
   }[c]));
 }
 
+async function tryRefresh() {
+  const rt = localStorage.getItem('refreshToken');
+  if (!rt) return false;
+  try {
+    const r = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt })
+    });
+    const d = await r.json();
+    if (!r.ok || !d.token) return false;
+    localStorage.setItem('authToken', d.token);
+    if (d.role) localStorage.setItem('role', d.role);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function apiFetch(url, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-  const token = getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE_URL}${url}`, { ...options, headers });
+  const build = (token) => {
+    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return { ...options, headers };
+  };
+
+  let res = await fetch(`${API_BASE_URL}${url}`, build(getToken()));
+
+  // Token expirado: intentar renovar con el refresh token una sola vez
+  if (res.status === 401 && (await tryRefresh())) {
+    res = await fetch(`${API_BASE_URL}${url}`, build(getToken()));
+  }
 
   if (res.status === 401 || res.status === 403) {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('role');
-    localStorage.removeItem('username');
-    window.location.href = 'login.html';
+    logoutAdmin();
     throw new Error('No autorizado');
   }
   return res.json();
@@ -501,6 +525,7 @@ function eliminarUsuario(id) {
 
 function logoutAdmin() {
   localStorage.removeItem('authToken');
+  localStorage.removeItem('refreshToken');
   localStorage.removeItem('role');
   localStorage.removeItem('username');
   window.location.href = 'index.html';

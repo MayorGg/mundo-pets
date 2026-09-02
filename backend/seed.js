@@ -1,4 +1,5 @@
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 // Mismos 16 productos del catálogo original (frontend/script.js)
@@ -122,17 +123,17 @@ async function main() {
   // Cuenta admin
   const [adminRow] = await conn.query('SELECT id FROM users WHERE email = ? OR username = ?', [ADMIN.email, ADMIN.username]);
   if (adminRow.length === 0) {
-    await conn.query('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)', [ADMIN.username, ADMIN.email, ADMIN.password, 'admin']);
+    await conn.query('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)', [ADMIN.username, ADMIN.email, bcrypt.hashSync(ADMIN.password, 10), 'admin']);
     console.log('Cuenta admin creada.');
   } else {
-    await conn.query('UPDATE users SET role = ?, password = ? WHERE id = ?', ['admin', ADMIN.password, adminRow[0].id]);
+    await conn.query('UPDATE users SET role = ?, password = ? WHERE id = ?', ['admin', bcrypt.hashSync(ADMIN.password, 10), adminRow[0].id]);
     console.log('Cuenta admin actualizada.');
   }
 
   // Usuario demo (usuario normal)
   const [demoRow] = await conn.query('SELECT id FROM users WHERE email = ? OR username = ?', [DEMO.email, DEMO.username]);
   if (demoRow.length === 0) {
-    await conn.query('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)', [DEMO.username, DEMO.email, DEMO.password, 'user']);
+    await conn.query('INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)', [DEMO.username, DEMO.email, bcrypt.hashSync(DEMO.password, 10), 'user']);
     console.log('Usuario demo creado.');
   } else {
     await conn.query('UPDATE users SET role = ? WHERE id = ?', ['user', demoRow[0].id]);
