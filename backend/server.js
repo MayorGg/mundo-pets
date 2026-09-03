@@ -275,6 +275,126 @@ app.post('/api/auth/refresh', (req, res) => {
   }
 });
 
+const PAYMENT_METHODS = new Set(['pse', 'mercadopago', 'efectivo']);
+
+function parseReservationDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+  return date;
+}
+
+app.post('/api/orders', requireAuth, async (req, res) => {
+  const { items, payment_method: paymentMethod } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'El pedido debe contener al menos un producto' });
+  }
+  if (!PAYMENT_METHODS.has(paymentMethod)) {
+    return res.status(400).json({ error: 'Método de pago no válido' });
+  }
+  if (!Number.isInteger(Number(req.user.id))) {
+    return res.status(400).json({ error: 'La cuenta no tiene un identificador válido' });
+  }
+
+  const normalizedItems = items.map(item => ({
+    productId: Number(item && (item.product_id ?? item.id)),
+    quantity: Number(item && item.quantity),
+    date: item && item.date ? item.date : (item && item.reservation_date ? item.reservation_date : null)
+  }));
+  if (normalizedItems.some(item => !Number.isInteger(item.productId) || item.productId < 1 || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 100)) {
+    return res.status(400).json({ error: 'Cada línea debe tener un producto y una cantidad válida' });
+  }
+
+  const productIds = [...new Set(normalizedItems.map(item => item.productId))];
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const placeholders = productIds.map(() => '?').join(',');
+    const [products] = await conn.query(
+      `SELECT id, precio, requiere_fecha FROM products WHERE id IN (${placeholders}) AND activo = 1 FOR UPDATE`,
+      productIds
+    );
+    const productsById = new Map(products.map(product => [product.id, product]));
+    if (products.length !== productIds.length) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Uno o más productos ya no están disponibles' });
+    }
+
+    let total = 0;
+    for (const item of normalizedItems) {
+      const product = productsById.get(item.productId);
+      const requiresDate = Boolean(product.requiere_fecha);
+      if (requiresDate !== Boolean(item.date)) {
+        await conn.rollback();
+        return res.status(400).json({ error: `La fecha del producto ${item.productId} no es válida` });
+      }
+      if (item.date) {
+        const reservationDate = parseReservationDate(item.date);
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        if (!reservationDate || reservationDate <= today || reservationDate.getUTCDay() === 0) {
+          await conn.rollback();
+          return res.status(400).json({ error: 'La fecha de reserva debe ser futura y no puede ser domingo' });
+        }
+      }
+      total += Number(product.precio) * item.quantity;
+    }
+    total = Math.round(total * 100) / 100;
+
+    const [orderResult] = await conn.query(
+      `INSERT INTO orders (user_id, total, payment_method, order_status) VALUES (?, ?, ?, 'pending')`,
+      [Number(req.user.id), total, paymentMethod]
+    );
+    const orderId = orderResult.insertId;
+    const reservationIds = [];
+    for (const item of normalizedItems) {
+      const product = productsById.get(item.productId);
+      const price = Number(product.precio);
+      await conn.query(
+        'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)',
+        [orderId, item.productId, item.quantity, price]
+      );
+      if (item.date) {
+        const [reservationResult] = await conn.query(
+          `INSERT INTO reservations (order_id, user_id, product_id, reservation_date, quantity, price)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [orderId, Number(req.user.id), item.productId, item.date, item.quantity, price]
+        );
+        reservationIds.push(reservationResult.insertId);
+      }
+    }
+    await conn.commit();
+    return res.status(201).json({
+      message: 'Pedido creado',
+      order_id: orderId,
+      reservation_ids: reservationIds,
+      total,
+      status: 'pending'
+    });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error('Error creando pedido:', err.message);
+    return res.status(500).json({ error: 'No se pudo crear el pedido' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+app.get('/api/orders', requireAuth, async (req, res) => {
+  try {
+    const [orders] = await pool.query(
+      `SELECT id, total, payment_method, order_status, created_at
+       FROM orders WHERE user_id = ? ORDER BY created_at DESC`,
+      [Number(req.user.id)]
+    );
+    res.json(orders.map(order => ({ ...order, total: Number(order.total) })));
+  } catch (err) {
+    console.error('Error listando pedidos:', err.message);
+    res.status(500).json({ error: 'No se pudieron cargar los pedidos' });
+  }
+});
+
 function productoParams(req) {
   const { nombre, categoria, precio, descripcion, imagen, requiere_fecha, activo } = req.body;
   return {

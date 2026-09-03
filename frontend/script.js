@@ -1,5 +1,5 @@
-// URL base del backend (asegúrate de levantar el servidor en este puerto)
-const API_BASE_URL = 'http://localhost:5000';
+// En producción la API se sirve desde el mismo origen; el fallback permite abrir el frontend localmente.
+const API_BASE_URL = window.location.protocol === 'file:' ? 'http://localhost:5000' : window.location.origin;
 
 function esc(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({
@@ -67,7 +67,14 @@ const MESES_ES = [
 const DIAS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const CATEGORIAS_CON_AGENDA = ['peluqueria', 'guarderia'];
 
-let carrito = [];
+let carrito = (() => {
+  try {
+    const guardado = JSON.parse(localStorage.getItem('mundoPetsCart') || '[]');
+    return Array.isArray(guardado) ? guardado : [];
+  } catch {
+    return [];
+  }
+})();
 let metodoPagoSeleccionado = null;
 let fechaServicioSeleccionada = null;
 let calendarioMes = 7;
@@ -686,6 +693,7 @@ function agregarAlCarrito(id, nombre, precio, requiereFecha) {
 
 function actualizarContadorCarrito() {
   const totalItems = carrito.reduce((total, item) => total + item.cantidad, 0);
+  localStorage.setItem('mundoPetsCart', JSON.stringify(carrito));
   const counter = document.getElementById('cart-count');
   if (!counter) return;
   counter.textContent = totalItems;
@@ -797,7 +805,7 @@ function checkout() {
 
     summaryHTML += `
       <div class="flex items-center justify-between gap-2 border-b border-gray-200 py-2">
-        <span class="font-medium">${item.nombre} x ${item.cantidad}${item.fecha ? `<br><small class="text-muted">${formatearFechaCO(item.fecha)}</small>` : ''}</span>
+        <span class="font-medium">${esc(item.nombre)} x ${item.cantidad}${item.fecha ? `<br><small class="text-muted">${formatearFechaCO(item.fecha)}</small>` : ''}</span>
         <span class="font-bold text-success">$${subtotal.toLocaleString()}</span>
       </div>
     `;
@@ -826,7 +834,7 @@ function selectPayment(metodo) {
   event.target.closest('.payment-btn').classList.add('payment-selected');
 }
 
-function processPayment() {
+async function processPayment() {
   if (!metodoPagoSeleccionado) {
     Swal.fire({
       icon: 'warning',
@@ -839,23 +847,43 @@ function processPayment() {
 
   const total = carrito.reduce((total, item) => total + (item.precio * item.cantidad), 0);
 
+  const items = carrito.map(item => ({
+    product_id: item.id,
+    quantity: item.cantidad,
+    reservation_date: item.fecha || null
+  }));
+
   Swal.fire({
     icon: 'info',
-    title: 'Procesando Pago',
-    text: `Redirigiendo a ${metodoPagoSeleccionado.toUpperCase()}...`,
+    title: 'Creando pedido',
+    text: 'Validando productos y reserva...',
     showConfirmButton: false,
-    timer: 2000
-  }).then(() => {
-    // Aquí es donde conectarías con PSE, Mercado Pago, etc.
+    allowOutsideClick: false,
+    didOpen: () => Swal.showLoading()
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+      },
+      body: JSON.stringify({ items, payment_method: metodoPagoSeleccionado })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No se pudo crear el pedido');
+    Swal.close();
     Swal.fire({
       icon: 'success',
-      title: '¡Pago Exitoso!',
-      text: `Tu compra por $${total.toLocaleString()} ha sido procesada`,
+      title: '¡Pedido creado!',
+      text: `Pedido #${data.order_id} por $${Number(data.total).toLocaleString()} registrado como pendiente.`,
       confirmButtonColor: '#28a745',
       confirmButtonText: 'Continuar'
     }).then(() => {
       // Limpiar carrito
       carrito = [];
+      localStorage.removeItem('mundoPetsCart');
       metodoPagoSeleccionado = null;
       actualizarContadorCarrito();
       closeModal('checkoutModal');
@@ -863,5 +891,13 @@ function processPayment() {
       // Redirigir al dashboard
       window.location.href = 'dashboard.html';
     });
-  });
+  } catch (error) {
+    Swal.close();
+    Swal.fire({
+      icon: 'error',
+      title: 'No se pudo crear el pedido',
+      text: error.message,
+      confirmButtonColor: '#b42318'
+    });
+  }
 }

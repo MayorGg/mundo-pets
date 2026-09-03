@@ -13,7 +13,7 @@ La solución está dividida en dos capas principales:
 - **Backend:** servidor Node.js con Express. Sirve los archivos estáticos del frontend, expone una API REST y accede a MySQL mediante un pool de conexiones.
 - **Frontend:** páginas HTML independientes con JavaScript vanilla. Tailwind CSS se compila desde una hoja fuente y la interacción se realiza con DOM, `fetch`, `localStorage` y modales.
 
-El sistema tiene catálogo, autenticación, roles, administración de productos/categorías/usuarios, carrito y selección de fechas para determinados servicios. Sin embargo, el carrito, las reservas y el checkout no se persisten en el servidor. El pago es una simulación visual y no existe una entidad de pedido ni integración con una pasarela real.
+El sistema tiene catálogo, autenticación, roles, administración de productos/categorías/usuarios, carrito y selección de fechas para determinados servicios. El carrito se conserva localmente y el checkout ya crea pedidos y reservas pendientes en MySQL. El pago continúa pendiente de integración con una pasarela real.
 
 ### Estado funcional resumido
 
@@ -23,9 +23,9 @@ El sistema tiene catálogo, autenticación, roles, administración de productos/
 | Registro e inicio de sesión | Implementado con JWT |
 | Roles `user` y `admin` | Implementados en backend y frontend |
 | Gestión administrativa | Implementada para productos, categorías y usuarios |
-| Carrito | Implementado solo en memoria del navegador |
-| Reserva de servicios | Selección de fecha implementada solo en memoria |
-| Pedidos | No existe API ni tabla |
+| Carrito | Conservado en `localStorage` y enviado al crear pedido |
+| Reserva de servicios | Persistida como reserva pendiente dentro de un pedido |
+| Pedidos | Implementados con API y tablas; estado inicial `pending` |
 | Pagos | Simulados; no hay proveedor conectado |
 | Fallback sin MySQL | Solo cubre registro e inicio de sesión mediante `users.json` |
 
@@ -329,13 +329,15 @@ El checkout:
 2. Construye un resumen en el modal.
 3. Permite elegir PSE, Mercado Pago o efectivo.
 4. Muestra mensajes de procesamiento y éxito.
-5. Vacía el carrito y vuelve a `dashboard.html`.
+5. Envía las líneas a `POST /api/orders` con el access token.
+6. El backend recalcula precios, crea el pedido y persiste reservas fechadas en una transacción.
+7. Tras recibir éxito, vacía el carrito local y vuelve a `dashboard.html`.
 
-No se envía información de compra al backend. No existe una tabla `orders`, `order_items`, `payments` o equivalente. Las menciones a PSE y Mercado Pago son únicamente interfaz; el código indica que sería necesario conectar esos proveedores.
+El checkout envía las líneas y el método de pago a `POST /api/orders`. El backend consulta productos activos, recalcula precios y total, crea `orders` y `order_items`, y crea `reservations` para las líneas con fecha dentro de la misma transacción. `GET /api/orders` devuelve el historial del usuario. Las menciones a PSE y Mercado Pago siguen siendo estados `pending`; todavía no existe una tabla de pagos ni integración con un proveedor real.
 
 ## 9. API REST
 
-La URL base es `http://localhost:5000/api`. Las respuestas normalmente son JSON. Las rutas administrativas requieren `Authorization: Bearer <token>`.
+La API se sirve desde el origen actual (`window.location.origin`) y conserva `http://localhost:5000` como fallback cuando se abre el frontend con `file:`. Las respuestas normalmente son JSON. Las rutas protegidas requieren `Authorization: Bearer <token>`.
 
 ### Catálogo público
 
@@ -419,6 +421,10 @@ La base se llama `mundo_pets`, usa `utf8mb4` y está declarada en [backend/setup
 
 No existe una clave foránea entre `products.categoria` y `categories`. La relación se realiza por igualdad de texto. Por eso el backend implementa manualmente la cascada cuando se renombra una categoría y bloquea su eliminación si encuentra productos asociados.
 
+### `orders`, `order_items` y `reservations`
+
+`orders` almacena el usuario, total recalculado, método de pago y estado (`pending`, `paid`, `processing` o `cancelled`). `order_items` conserva cada producto, cantidad y precio de la línea. `reservations` conserva las líneas de servicios con fecha, vinculadas al pedido, usuario y producto, con estado `pending`, `confirmed` o `cancelled`. Las tres tablas se crean en `setup-db.sql` y mediante `seed.js`, con claves foráneas e índices.
+
 `products` tiene dos índices para el catálogo: `idx_products_activo (activo)` e `idx_products_categoria (categoria)` (creados por `seed.js` si no existen y declarados en `setup-db.sql`).
 
 ### Datos iniciales
@@ -496,7 +502,7 @@ Estos hallazgos describen el estado actual. Los puntos 1, 2, 3, 5 y 6 se resolvi
 8. **Carrito no persistente:** una recarga elimina la compra preparada.
 9. **Reserva no persistente:** seleccionar una fecha no bloquea disponibilidad ni crea una reserva.
 10. **Pago simulado:** no se valida, cobra ni confirma ninguna transacción real.
-11. **Ausencia de pedidos:** no existe historial, factura, estado de pedido o trazabilidad.
+11. **Historial comercial incompleto:** ya existen pedidos, líneas, reservas e historial básico, pero faltan factura, trazabilidad completa y actualización de estados por proveedor de pago.
 12. **Relación por texto:** cambiar manualmente nombres de categorías puede dejar datos inconsistentes si se hace fuera del endpoint previsto.
 13. **Códigos HTTP irregulares:** algunos errores de validación o recursos inexistentes se devuelven con HTTP 200 y un campo `error`.
 14. **Año del calendario fijo:** la lógica de disponibilidad deja de ser adecuada al cambiar el año.
@@ -556,7 +562,7 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 1. ~~Hashear contraseñas y retirar las credenciales de desarrollo del código y de archivos versionados~~ **Hecho** (bcrypt + migración + `.env` gitignoreado).
 2. ~~Mover el secreto JWT a una variable de entorno fuerte, definir expiración y diseñar renovación~~ **Hecho** (`JWT_SECRET` en `.env`, access 2h, refresh 7d, `POST /api/auth/refresh`).
 3. Restringir CORS y servir la aplicación mediante HTTPS. **CORS hecho** (`CORS_ORIGIN`); **HTTPS en preparación** (config Nginx + Let's Encrypt en `deploy/`, pendiente de activar).
-4. Crear entidades y endpoints para pedidos, líneas de pedido, pagos y reservas.
+4. Integrar pagos reales, webhooks y estados de pedido después de la persistencia base ya implementada.
 5. Validar disponibilidad y precios en backend antes de confirmar una compra.
 
 ### Prioridad media
@@ -564,14 +570,14 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 1. Sustituir la relación textual de productos por una clave foránea a categorías.
 2. Unificar códigos HTTP y formato de errores.
 3. ~~Añadir rate limiting~~ **Hecho** en login/registro; pendiente auditoría administrativa y validación de entrada más estricta.
-4. Externalizar la URL de la API y el año/calendario de servicios. **Nota:** `API_BASE_URL = 'http://localhost:5000'` está hardcodeado en `script.js`/`admin.js` y hoy convive con la CSP y `CORS_ORIGIN` de desarrollo; en producción debe resolverse por el mismo origen o ajustar CSP/CORS (ver sección 17).
+4. Externalizar el año/calendario de servicios. La URL de API ya usa el origen actual y conserva fallback a `http://localhost:5000` cuando se abre con `file:`.
 5. Añadir pruebas automatizadas para autenticación, autorización, CRUD y reglas de fechas.
 
 ### Prioridad de evolución funcional
 
 1. Persistir el carrito o asociarlo a una sesión/usuario.
-2. Crear historial de compras y reservas.
-3. Integrar un proveedor de pagos real mediante backend.
+2. Completar historial de compras con detalle, factura y cancelaciones.
+3. Integrar un proveedor de pagos real mediante backend y webhooks.
 4. Añadir disponibilidad por horario, cupos y conflictos.
 5. ~~Gestionar imágenes con validación y almacenamiento controlado~~ **Hecho** en la Fase Procesamiento (subida con `multer`/`sharp` → WebP optimizado, ver sección 18).
 
@@ -581,9 +587,9 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 
 Mundo Pets es actualmente un prototipo funcional de comercio y servicios para mascotas con una base técnica sencilla: Express, MySQL, páginas estáticas y JavaScript vanilla. Su punto fuerte es la separación clara entre servidor, interfaz y datos, además de contar con administración de catálogo y roles.
 
-Su principal límite arquitectónico es que el recorrido comercial termina en el navegador: no hay persistencia de carrito, reservas, pedidos ni pagos. Por tanto, debe considerarse una aplicación de catálogo con checkout simulado, no todavía una plataforma transaccional completa.
+Su principal límite arquitectónico es que el recorrido comercial todavía no confirma pagos reales ni dispone de inventario o disponibilidad por cupos. Ya existe persistencia de pedidos, líneas y reservas, por lo que el checkout dejó de ser únicamente una operación local, aunque la plataforma aún no es transaccional completa.
 
-En las últimas iteraciones se endureció la base de seguridad (bcrypt, JWT + refresh, CORS, rate limiting), se preparó la infraestructura de despliegue (helmet, compression, cache-control, PM2, backups, Nginx/HTTPS) y se mejoró el procesamiento (imágenes optimizadas, paginación, caché e índices). El siguiente paso recomendado es llevar la confirmación de compras y reservas al backend (pedidos, pagos y disponibilidad), completar HTTPS y normalizar los códigos HTTP.
+En las últimas iteraciones se endureció la base de seguridad (bcrypt, JWT + refresh, CORS, rate limiting), se preparó la infraestructura de despliegue (helmet, compression, cache-control, PM2, backups, Nginx/HTTPS), se mejoró el procesamiento (imágenes optimizadas, paginación, caché e índices) y se persistieron pedidos y reservas. El siguiente paso recomendado es integrar pagos y disponibilidad real, completar HTTPS y normalizar los códigos HTTP.
 
 ## 17. Infraestructura y producción (Fase Infraestructura)
 
@@ -631,7 +637,7 @@ Los assets se versionan con parámetro `?v=` en las cinco páginas (`dist/tailwi
 
 ### Pendiente identificado
 
-- `script.js` y `admin.js` tienen `API_BASE_URL = 'http://localhost:5000'` hardcodeado. En producción con HTTPS y la CSP/CORS actuales, la API debería servirse por el mismo origen (sin hardcode) o ajustarse la CSP y `CORS_ORIGIN`. Está pendiente de externalizar la URL de la API.
+- `script.js` y `admin.js` usan `window.location.origin` cuando se sirven desde Express y solo conservan `http://localhost:5000` como fallback al abrir archivos directamente.
 
 ## 18. Procesamiento y escalabilidad (Fase Procesamiento)
 

@@ -1,5 +1,5 @@
-// URL base del backend
-const API_BASE_URL = 'http://localhost:5000';
+// En producción la API se sirve desde el mismo origen; el fallback permite abrir el frontend localmente.
+const API_BASE_URL = window.location.protocol === 'file:' ? 'http://localhost:5000' : window.location.origin;
 
 let productosAdmin = [];
 let categoriasAdmin = [];
