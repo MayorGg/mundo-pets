@@ -4,6 +4,11 @@ const API_BASE_URL = 'http://localhost:5000';
 let productosAdmin = [];
 let categoriasAdmin = [];
 let usuariosAdmin = [];
+let productosPagina = 1;
+let productosPages = 1;
+let usuariosPagina = 1;
+let usuariosPages = 1;
+let productoImagenFile = null;
 
 function getToken() {
   return localStorage.getItem('authToken');
@@ -128,25 +133,62 @@ async function cargarStats() {
 }
 
 // Productos
-async function cargarProductosAdmin() {
+async function cargarProductosAdmin(page = productosPagina) {
   try {
-    const data = await apiFetch('/api/admin/products');
-    productosAdmin = data;
+    const data = await apiFetch(`/api/admin/products?page=${page}&limit=15`);
+    productosAdmin = data.items || [];
+    productosPagina = data.page;
+    productosPages = data.pages;
     renderProductos();
+    renderPaginacion('productos');
   } catch (err) {
     console.error('Error cargando productos:', err);
   }
 }
 
+function cambiarPaginaProductos(delta) {
+  const nueva = productosPagina + delta;
+  if (nueva < 1 || nueva > productosPages) return;
+  cargarProductosAdmin(nueva);
+}
+
+function renderPaginacion(tipo) {
+  const id = tipo === 'productos' ? 'pag-productos' : 'pag-usuarios';
+  const el = document.getElementById(id);
+  if (!el) return;
+  const pagina = tipo === 'productos' ? productosPagina : usuariosPagina;
+  const pages = tipo === 'productos' ? productosPages : usuariosPages;
+  if (pages <= 1) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <div class="flex items-center justify-center gap-3 pt-4">
+      <button type="button" onclick="cambiarPagina${tipo[0].toUpperCase() + tipo.slice(1)}(-1)" class="btn-brand-outline px-3 py-1.5 text-sm" ${pagina <= 1 ? 'disabled' : ''}>
+        <i class="fas fa-chevron-left"></i> Anterior
+      </button>
+      <span class="text-sm font-semibold text-muted">Página ${pagina} de ${pages}</span>
+      <button type="button" onclick="cambiarPagina${tipo[0].toUpperCase() + tipo.slice(1)}(1)" class="btn-brand-outline px-3 py-1.5 text-sm" ${pagina >= pages ? 'disabled' : ''}>
+        Siguiente <i class="fas fa-chevron-right"></i>
+      </button>
+    </div>
+  `;
+}
+
 function renderProductos() {
   const tbody = document.getElementById('tbody-productos');
   if (!productosAdmin.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-muted">No hay productos. Crea uno con "Nuevo Producto".</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-muted">No hay productos. Crea uno con "Nuevo Producto".</td></tr>`;
     return;
   }
   tbody.innerHTML = productosAdmin.map(p => `
     <tr class="transition hover:bg-brand-soft/40">
       <td class="px-4 py-3 text-muted">${p.id}</td>
+      <td class="px-4 py-3">
+        ${p.imagen
+          ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" loading="lazy" class="h-10 w-10 rounded-lg object-cover" onerror="this.remove()">`
+          : '<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand"><i class="fas fa-box"></i></div>'}
+      </td>
       <td class="px-4 py-3 font-semibold text-ink">${esc(p.nombre)}</td>
       <td class="px-4 py-3 text-muted">${esc(p.categoria)}</td>
       <td class="px-4 py-3 font-semibold text-success">$${Number(p.precio).toLocaleString()}</td>
@@ -178,6 +220,9 @@ function abrirModalProducto(id) {
   document.getElementById('prodDescripcion').value = '';
   document.getElementById('prodFecha').checked = false;
   document.getElementById('prodActivo').checked = true;
+  document.getElementById('prodImagenFile').value = '';
+  productoImagenFile = null;
+  mostrarPreviewImagen('');
   document.getElementById('productoModalTitle').innerHTML =
     `<i class="fas fa-${esEdicion ? 'pen' : 'plus'} mr-2"></i>${esEdicion ? 'Editar Producto' : 'Nuevo Producto'}`;
 
@@ -190,9 +235,50 @@ function abrirModalProducto(id) {
       document.getElementById('prodDescripcion').value = p.descripcion || '';
       document.getElementById('prodFecha').checked = !!p.requiere_fecha;
       document.getElementById('prodActivo').checked = !!p.activo;
+      if (p.imagen) mostrarPreviewImagen(p.imagen);
     }
   }
   openModal('productoModal');
+}
+
+function onImagenSeleccionada(input) {
+  const file = input.files && input.files[0];
+  if (!file) { productoImagenFile = null; mostrarPreviewImagen(''); return; }
+  if (!file.type.startsWith('image/')) {
+    Swal.fire({ icon: 'warning', title: 'Archivo inválido', text: 'Selecciona una imagen (JPG, PNG, WebP, etc.)', confirmButtonColor: '#3085d6' });
+    input.value = '';
+    return;
+  }
+  productoImagenFile = file;
+  const reader = new FileReader();
+  reader.onload = (e) => mostrarPreviewImagen(e.target.result);
+  reader.readAsDataURL(file);
+}
+
+function mostrarPreviewImagen(src) {
+  const preview = document.getElementById('prodImagenPreview');
+  const empty = document.getElementById('prodImagenEmpty');
+  if (!preview) return;
+  if (src) {
+    preview.src = src;
+    preview.classList.remove('hidden');
+    if (empty) empty.classList.add('hidden');
+  } else {
+    preview.classList.add('hidden');
+    if (empty) empty.classList.remove('hidden');
+  }
+}
+
+async function subirImagenProducto(id, file) {
+  const form = new FormData();
+  form.append('imagen', file);
+  const token = getToken();
+  const res = await fetch(`${API_BASE_URL}/api/admin/products/${id}/image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form
+  });
+  return res.json();
 }
 
 async function guardarProducto() {
@@ -216,10 +302,19 @@ async function guardarProducto() {
   }
 
   try {
-    if (id) {
-      await apiFetch(`/api/admin/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    let productoId = id;
+    if (productoId) {
+      await apiFetch(`/api/admin/products/${productoId}`, { method: 'PUT', body: JSON.stringify(payload) });
     } else {
-      await apiFetch('/api/admin/products', { method: 'POST', body: JSON.stringify(payload) });
+      const creado = await apiFetch('/api/admin/products', { method: 'POST', body: JSON.stringify(payload) });
+      if (creado.error) throw new Error(creado.error);
+      productoId = creado.id;
+    }
+    if (productoImagenFile && productoId) {
+      const up = await subirImagenProducto(productoId, productoImagenFile);
+      if (up.error) {
+        Swal.fire({ icon: 'error', title: 'No se pudo subir la imagen', text: up.error, confirmButtonColor: '#3085d6' });
+      }
     }
     closeModal('productoModal');
     await cargarProductosAdmin();
@@ -227,7 +322,7 @@ async function guardarProducto() {
     Swal.fire({ icon: 'success', title: 'Guardado', text: 'Producto guardado correctamente', confirmButtonColor: '#28a745', timer: 1600, showConfirmButton: false });
   } catch (err) {
     console.error('Error guardando producto:', err);
-    Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar el producto', confirmButtonColor: '#3085d6' });
+    Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'No se pudo guardar el producto', confirmButtonColor: '#3085d6' });
   }
 }
 
@@ -246,7 +341,11 @@ function eliminarProducto(id) {
     if (!result.isConfirmed) return;
     try {
       await apiFetch(`/api/admin/products/${id}`, { method: 'DELETE' });
-      await cargarProductosAdmin();
+      if (productosAdmin.length === 1 && productosPagina > 1) {
+        await cargarProductosAdmin(productosPagina - 1);
+      } else {
+        await cargarProductosAdmin();
+      }
       cargarStats();
       Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Producto eliminado', confirmButtonColor: '#28a745', timer: 1500, showConfirmButton: false });
     } catch (err) {
@@ -407,14 +506,23 @@ function eliminarCategoria(id) {
 }
 
 // Usuarios
-async function cargarUsuarios() {
+async function cargarUsuarios(page = usuariosPagina) {
   try {
-    const data = await apiFetch('/api/admin/users');
-    usuariosAdmin = data;
+    const data = await apiFetch(`/api/admin/users?page=${page}&limit=15`);
+    usuariosAdmin = data.items || [];
+    usuariosPagina = data.page;
+    usuariosPages = data.pages;
     renderUsuarios();
+    renderPaginacion('usuarios');
   } catch (err) {
     console.error('Error cargando usuarios:', err);
   }
+}
+
+function cambiarPaginaUsuarios(delta) {
+  const nueva = usuariosPagina + delta;
+  if (nueva < 1 || nueva > usuariosPages) return;
+  cargarUsuarios(nueva);
 }
 
 function renderUsuarios() {
@@ -513,7 +621,11 @@ function eliminarUsuario(id) {
         Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: data.error, confirmButtonColor: '#3085d6' });
         return;
       }
-      await cargarUsuarios();
+      if (usuariosAdmin.length === 1 && usuariosPagina > 1) {
+        await cargarUsuarios(usuariosPagina - 1);
+      } else {
+        await cargarUsuarios();
+      }
       cargarStats();
       Swal.fire({ icon: 'success', title: 'Eliminado', text: 'Usuario eliminado', confirmButtonColor: '#28a745', timer: 1500, showConfirmButton: false });
     } catch (err) {

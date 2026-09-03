@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 2 de septiembre de 2026 — Fase 0 de seguridad (bcrypt, JWT + refresh, CORS, rate limiting) y Fase Infraestructura (helmet, compression, cache-control, PM2, backups, Nginx/Let's Encrypt).  
+> **Última actualización:** 2 de septiembre de 2026 — Fase 0 de seguridad (bcrypt, JWT + refresh, CORS, rate limiting), Fase Infraestructura (helmet, compression, cache-control, PM2, backups, Nginx/Let's Encrypt) y Fase Procesamiento (imágenes con sharp, paginación, caché, índices).  
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -276,9 +276,13 @@ Comprueba que existan token y rol `admin` en `localStorage`. Si falta alguno, re
 
 ### Carga del catálogo
 
-`cargarProductos()` en [frontend/script.js](frontend/script.js) llama a `GET /api/products`. Si la petición falla, utiliza `PRODUCTOS_LOCALES`, un catálogo embebido con 16 productos agrupados en cuatro categorías.
+`cargarProductos()` en [frontend/script.js](frontend/script.js) llama a `GET /api/products?limit=200` y consume la respuesta paginada (`data.items`). Si la petición falla, utiliza `PRODUCTOS_LOCALES`, un catálogo embebido con 16 productos agrupados en cuatro categorías.
 
 El fallback del frontend permite renderizar productos sin API, pero no sustituye la persistencia administrativa ni el acceso a categorías de MySQL.
+
+### Imágenes de producto
+
+Las tarjetas del catálogo renderizan la imagen del producto si existe (`products.imagen` → `/img/products/<id>.webp`), con `loading="lazy"`; si la imagen falla o no existe, se muestra la franja de color con el icono de la categoría (fallback visual). El panel admin permite subir una imagen por producto (se optimiza a WebP en el servidor, máx. 800 px).
 
 ### Categorías iniciales
 
@@ -337,10 +341,10 @@ La URL base es `http://localhost:5000/api`. Las respuestas normalmente son JSON.
 
 | Método y ruta | Autenticación | Comportamiento |
 |---|---|---|
-| `GET /api/categories` | No | Devuelve `id`, `nombre`, `descripcion`, `icono` y `color`, ordenados por nombre |
-| `GET /api/products` | No | Devuelve productos con `activo = 1`, ordenados por categoría e ID; convierte precio a número y `requiere_fecha` a booleano |
+| `GET /api/categories` | No | Devuelve `id`, `nombre`, `descripcion`, `icono` y `color`, ordenados por nombre. Caché en memoria (30 s) |
+| `GET /api/products` | No | Devuelve productos con `activo = 1` **paginado** (`?page`, `?limit`, máx. 200) → `{ items, total, page, pages, limit }`; convierte precio a número y `requiere_fecha` a booleano. Caché en memoria (30 s) por página |
 
-Si MySQL falla, estas rutas responden error 500. No usan `users.json` ni el catálogo local del frontend.
+La caché del catálogo se **invalida** automáticamente al crear/editar/eliminar productos o categorías. Si MySQL falla, estas rutas responden error 500. No usan `users.json` ni el catálogo local del frontend.
 
 ### Autenticación
 
@@ -363,15 +367,16 @@ El registro comprueba campos requeridos, formato básico de email y duplicados. 
 | `POST /api/admin/categories` | Crea categoría; exige nombre y color de `warn`, `danger`, `info`, `success`, `brand` o `muted` |
 | `PUT /api/admin/categories/:id` | Actualiza categoría; si cambia el nombre, actualiza `products.categoria` |
 | `DELETE /api/admin/categories/:id` | Elimina solo si no tiene productos asociados |
-| `GET /api/admin/users` | Lista ID, username, email, rol y fecha de creación |
+| `GET /api/admin/users` | Lista usuarios **paginado** (`?page`, `?limit`) → `{ items, total, page, pages, limit }` |
 | `DELETE /api/admin/users/:id` | Elimina usuarios; bloquea eliminar una cuenta admin |
 | `PUT /api/admin/users/:id/role` | Cambia el rol a `user` o `admin`; protege el último administrador y el propio rol |
-| `GET /api/admin/products` | Lista todos los productos, incluidos inactivos |
+| `GET /api/admin/products` | Lista todos los productos (incluidos inactivos) **paginado** (`?page`, `?limit`) |
 | `POST /api/admin/products` | Crea producto y verifica que exista la categoría |
 | `PUT /api/admin/products/:id` | Actualiza producto y valida categoría |
+| `POST /api/admin/products/:id/image` | Sube imagen del producto (multipart `imagen`); `multer` recibe el archivo y `sharp` lo optimiza a WebP (máx. 800 px) guardándolo en `img/products/<id>.webp` |
 | `DELETE /api/admin/products/:id` | Elimina producto físicamente |
 
-Los productos aceptan `nombre`, `categoria`, `precio`, `descripcion`, `imagen`, `requiere_fecha` y `activo`. El backend exige nombre, categoría y precio numérico no negativo. No hay paginación, filtros ni endpoint para órdenes.
+Los productos aceptan `nombre`, `categoria`, `precio`, `descripcion`, `imagen`, `requiere_fecha` y `activo`. El backend exige nombre, categoría y precio numérico no negativo. El catálogo público y los listados de admin ya tienen paginación; no hay filtros ni endpoint para órdenes.
 
 ## 10. Modelo de datos y persistencia
 
@@ -397,7 +402,7 @@ La base se llama `mundo_pets`, usa `utf8mb4` y está declarada en [backend/setup
 | `categoria` | `VARCHAR(50)` | Nombre de categoría |
 | `precio` | `DECIMAL(10,2)` | Precio |
 | `descripcion` | `TEXT NULL` | Descripción |
-| `imagen` | `VARCHAR(255) NULL` | Ruta o URL, aunque el catálogo actual no la usa para renderizar la tarjeta |
+| `imagen` | `VARCHAR(255) NULL` | Ruta servida por Express: `/img/products/<id>.webp` (generada y optimizada con sharp); `NULL` si no hay imagen |
 | `requiere_fecha` | `TINYINT(1)` | Indica servicio con agenda |
 | `activo` | `TINYINT(1)` | Visibilidad en el catálogo público |
 
@@ -413,6 +418,8 @@ La base se llama `mundo_pets`, usa `utf8mb4` y está declarada en [backend/setup
 | `created_at` | `TIMESTAMP` | Fecha de creación |
 
 No existe una clave foránea entre `products.categoria` y `categories`. La relación se realiza por igualdad de texto. Por eso el backend implementa manualmente la cascada cuando se renombra una categoría y bloquea su eliminación si encuentra productos asociados.
+
+`products` tiene dos índices para el catálogo: `idx_products_activo (activo)` e `idx_products_categoria (categoria)` (creados por `seed.js` si no existen y declarados en `setup-db.sql`).
 
 ### Datos iniciales
 
@@ -566,7 +573,9 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 2. Crear historial de compras y reservas.
 3. Integrar un proveedor de pagos real mediante backend.
 4. Añadir disponibilidad por horario, cupos y conflictos.
-5. Gestionar imágenes con validación y almacenamiento controlado.
+5. ~~Gestionar imágenes con validación y almacenamiento controlado~~ **Hecho** en la Fase Procesamiento (subida con `multer`/`sharp` → WebP optimizado, ver sección 18).
+
+**Avances de la Fase Procesamiento:** subida de imágenes de producto con optimización server-side, paginación en catálogo y listados admin, caché corta en `/api/products` y `/api/categories`, e índices en `products` (detalles en la sección 18).
 
 ## 16. Conclusión
 
@@ -574,7 +583,7 @@ Mundo Pets es actualmente un prototipo funcional de comercio y servicios para ma
 
 Su principal límite arquitectónico es que el recorrido comercial termina en el navegador: no hay persistencia de carrito, reservas, pedidos ni pagos. Por tanto, debe considerarse una aplicación de catálogo con checkout simulado, no todavía una plataforma transaccional completa.
 
-En la última iteración se endureció la base de seguridad: contraseñas hasheadas con bcrypt, secreto JWT externo con expiración y refresh token, CORS restringido y rate limiting en autenticación. El siguiente paso recomendado es llevar la confirmación de compras y reservas al backend (pedidos, pagos y disponibilidad), completar HTTPS y normalizar los códigos HTTP.
+En las últimas iteraciones se endureció la base de seguridad (bcrypt, JWT + refresh, CORS, rate limiting), se preparó la infraestructura de despliegue (helmet, compression, cache-control, PM2, backups, Nginx/HTTPS) y se mejoró el procesamiento (imágenes optimizadas, paginación, caché e índices). El siguiente paso recomendado es llevar la confirmación de compras y reservas al backend (pedidos, pagos y disponibilidad), completar HTTPS y normalizar los códigos HTTP.
 
 ## 17. Infraestructura y producción (Fase Infraestructura)
 
@@ -623,3 +632,39 @@ Los assets se versionan con parámetro `?v=` en las cinco páginas (`dist/tailwi
 ### Pendiente identificado
 
 - `script.js` y `admin.js` tienen `API_BASE_URL = 'http://localhost:5000'` hardcodeado. En producción con HTTPS y la CSP/CORS actuales, la API debería servirse por el mismo origen (sin hardcode) o ajustarse la CSP y `CORS_ORIGIN`. Está pendiente de externalizar la URL de la API.
+
+## 18. Procesamiento y escalabilidad (Fase Procesamiento)
+
+Objetivo: que el backend no se vuelva el cuello de botella cuando crezca el catálogo o el tráfico.
+
+### Imágenes de producto (subida + optimización server-side)
+
+- **Subida:** el panel admin permite adjuntar una imagen por producto (campo `imagen` en el modal). El frontend la envía como `multipart/form-data` a `POST /api/admin/products/:id/image` (fichero `imagen`).
+- **Procesamiento:** `multer` (límite 8 MB) recibe el archivo en memoria y `sharp` lo optimiza:
+  - resize a `800×800` `fit: inside` sin ampliar;
+  - conversión a **WebP** (calidad 80);
+  - se guarda en `img/products/<id>.webp` y se actualiza `products.imagen`.
+- **Servido:** `/img/...` ya lo expone Express con cache inmutable. El catálogo y el admin renderizan la imagen con `loading="lazy"` y `onerror` → si falla o no hay imagen, se muestra la franja de color con el icono de la categoría (fallback visual).
+
+### Paginación
+
+- `GET /api/products` (público) y `GET /api/admin/products`, `GET /api/admin/users` (admin) aceptan `?page` y `?limit` (máx. 200) y responden `{ items, total, page, pages, limit }`.
+- El admin tiene controles Anterior/Siguiente y "Página X de Y" en Productos y Usuarios.
+- El catálogo de la tienda solicita `?limit=200` y agrupa por categoría como antes.
+
+### Caché corta en memoria
+
+- `GET /api/products` y `GET /api/categories` se sirven desde una caché en memoria con TTL de **30 segundos** (`getCached`).
+- Se invalida automáticamente (`invalidarCatalogo`) al crear/editar/eliminar productos o categorías y al subir una imagen, para que el catálogo público no sirva datos obsoletos más de lo necesario.
+
+### Índices
+
+- `idx_products_activo (activo)` e `idx_products_categoria (categoria)` en `products`, creados por `backend/seed.js` (idempotente) y declarados en `backend/setup-db.sql`. Favorecen el filtro por `activo = 1` y el agrupado/orden por categoría.
+
+### Verificación
+
+- Paginación pública: 16 productos → 4 páginas de a 5; admin: 15 por página (2 páginas).
+- Subida: imagen de 117 KB → WebP optimizado de ~36 KB a máx. 800 px, servido `image/webp` 200.
+- Caché: al crear un producto aparece al instante en el catálogo público (invalidación OK).
+- Índices: confirmados en `SHOW INDEX`.
+- Navegador: `<img loading="lazy">` en la tienda, miniatura en admin, sin errores de consola.

@@ -34,6 +34,15 @@ async function columnExists(conn, table, column) {
   return rows[0].c > 0;
 }
 
+async function indexExists(conn, table, indexName) {
+  const [rows] = await conn.query(
+    `SELECT COUNT(*) AS c FROM information_schema.statistics
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, indexName]
+  );
+  return rows[0].c > 0;
+}
+
 async function main() {
   const conn = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',
@@ -73,6 +82,16 @@ async function main() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   console.log('Tabla products lista.');
+
+  // Índices para catálogo (consulta por activo y agrupación por categoria)
+  if (!(await indexExists(conn, 'products', 'idx_products_activo'))) {
+    await conn.query('CREATE INDEX idx_products_activo ON products (activo)');
+    console.log('Índice idx_products_activo creado.');
+  }
+  if (!(await indexExists(conn, 'products', 'idx_products_categoria'))) {
+    await conn.query('CREATE INDEX idx_products_categoria ON products (categoria)');
+    console.log('Índice idx_products_categoria creado.');
+  }
 
   // Tabla categories + seed
   await conn.query(`

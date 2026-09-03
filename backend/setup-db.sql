@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS products (
   descripcion TEXT NULL,
   imagen VARCHAR(255) NULL,
   requiere_fecha TINYINT(1) NOT NULL DEFAULT 0,
-  activo TINYINT(1) NOT NULL DEFAULT 1
+  activo TINYINT(1) NOT NULL DEFAULT 1,
+  INDEX idx_products_activo (activo),
+  INDEX idx_products_categoria (categoria)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS categories (

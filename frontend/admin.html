@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="dist/tailwind.css?v=1" />
+  <link rel="stylesheet" href="dist/tailwind.css?v=2" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
@@ -132,6 +132,7 @@
                   <thead class="bg-brand-soft">
                     <tr>
                       <th class="px-4 py-3 font-semibold text-brand-dark">ID</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Imagen</th>
                       <th class="px-4 py-3 font-semibold text-brand-dark">Nombre</th>
                       <th class="px-4 py-3 font-semibold text-brand-dark">Categoría</th>
                       <th class="px-4 py-3 font-semibold text-brand-dark">Precio</th>
@@ -144,6 +145,7 @@
                 </table>
               </div>
             </div>
+            <div id="pag-productos" class="pb-2"></div>
           </div>
         </section>
 
@@ -204,6 +206,7 @@
                 </table>
               </div>
             </div>
+            <div id="pag-usuarios" class="pb-2"></div>
           </div>
         </section>
       </main>
@@ -224,6 +227,20 @@
           <div>
             <label for="prodNombre" class="mb-1.5 block text-sm font-semibold text-muted">Nombre</label>
             <input id="prodNombre" class="input-field w-full px-4 py-3" placeholder="Nombre del producto">
+          </div>
+          <div>
+            <label for="prodImagenFile" class="mb-1.5 block text-sm font-semibold text-muted">Imagen del producto</label>
+            <div class="mb-2 flex items-center gap-3">
+              <div id="prodImagenEmpty" class="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                <i class="fas fa-image"></i>
+              </div>
+              <img id="prodImagenPreview" class="hidden h-16 w-16 rounded-xl object-cover" alt="Vista previa">
+            </div>
+            <input type="file" id="prodImagenFile" accept="image/*" onchange="onImagenSeleccionada(this)"
+                   class="block w-full text-sm text-muted file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-brand-soft file:px-4 file:py-2 file:font-semibold file:text-brand hover:file:bg-brand-soft/60">
+            <p class="mt-1.5 text-sm text-muted">
+              <i class="fas fa-info-circle mr-1"></i>Se optimiza a WebP (máx. 800 px) en el servidor.
+            </p>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
@@ -347,6 +364,6 @@
     </div>
   </div>
 
-  <script src="admin.js?v=1"></script>
+  <script src="admin.js?v=2"></script>
 </body>
 </html>

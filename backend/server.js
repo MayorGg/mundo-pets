@@ -10,6 +10,8 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const compression = require('compression');
 const mysql = require('mysql2/promise');
+const multer = require('multer');
+const sharp = require('sharp');
 
 // Cargar variables de entorno según ambiente (dev -> .env, prod -> .env.production)
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -74,6 +76,50 @@ const registerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos de registro. Intenta de nuevo en unos minutos.' }
+});
+
+// ---- Caché corta en memoria para endpoints públicos ----
+const CACHE_TTL = 30 * 1000; // 30 s
+const cacheStore = new Map();
+async function getCached(key, fn) {
+  const hit = cacheStore.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.data;
+  const data = await fn();
+  cacheStore.set(key, { at: Date.now(), data });
+  return data;
+}
+function invalidateCache(...keys) {
+  keys.forEach(k => cacheStore.delete(k));
+}
+// Invalida todo el catálogo público (products en todas las páginas + categories)
+function invalidarCatalogo() {
+  for (const k of [...cacheStore.keys()]) {
+    if (k.startsWith('products:') || k === 'categories') cacheStore.delete(k);
+  }
+}
+
+// ---- Paginación ----
+function paginar(query, def) {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(query.limit) || def));
+  return { page, limit, offset: (page - 1) * limit };
+}
+function respuestaPaginada(items, total, page, limit) {
+  return {
+    items,
+    total,
+    page,
+    limit,
+    pages: Math.max(1, Math.ceil(total / limit))
+  };
+}
+
+// ---- Subida de imágenes de producto (multer + sharp) ----
+const PRODUCT_IMG_DIR = path.join(__dirname, '..', 'img', 'products');
+fs.mkdirSync(PRODUCT_IMG_DIR, { recursive: true });
+const uploadImagen = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 } // 8 MB máx
 });
 
 // Servir el frontend (páginas HTML, CSS, JS) con Cache-Control correcto:
@@ -242,38 +288,49 @@ function productoParams(req) {
   };
 }
 
-// Categorías públicas (para el catálogo y formularios)
+// Categorías públicas (para el catálogo y formularios) con caché corta
 app.get('/api/categories', async (req, res) => {
   try {
-    const conn = await pool.getConnection();
-    try {
-      const [rows] = await conn.query('SELECT id, nombre, descripcion, icono, color FROM categories ORDER BY nombre');
-      res.json(rows);
-    } finally {
-      conn.release();
-    }
+    const data = await getCached('categories', async () => {
+      const conn = await pool.getConnection();
+      try {
+        const [rows] = await conn.query('SELECT id, nombre, descripcion, icono, color FROM categories ORDER BY nombre');
+        return rows;
+      } finally {
+        conn.release();
+      }
+    });
+    res.json(data);
   } catch (err) {
     console.error('Error listando categorías:', err.message);
     res.status(500).json({ error: 'No se pudieron cargar las categorías' });
   }
 });
 
-// Catálogo público (productos activos)
+// Catálogo público (productos activos) con paginación y caché corta
 app.get('/api/products', async (req, res) => {
+  const { page, limit, offset } = paginar(req.query, 200);
   try {
-    const conn = await pool.getConnection();
-    try {
-      const [rows] = await conn.query(
-        'SELECT id, nombre, categoria, precio, descripcion, imagen, requiere_fecha FROM products WHERE activo = 1 ORDER BY categoria, id'
-      );
-      res.json(rows.map(r => ({
-        ...r,
-        precio: Number(r.precio),
-        requiere_fecha: !!r.requiere_fecha
-      })));
-    } finally {
-      conn.release();
-    }
+    const data = await getCached(`products:${page}:${limit}`, async () => {
+      const conn = await pool.getConnection();
+      try {
+        const [[{ total }]] = await conn.query(
+          'SELECT COUNT(*) AS total FROM products WHERE activo = 1'
+        );
+        const [rows] = await conn.query(
+          'SELECT id, nombre, categoria, precio, descripcion, imagen, requiere_fecha FROM products WHERE activo = 1 ORDER BY categoria, id LIMIT ? OFFSET ?',
+          [limit, offset]
+        );
+        return respuestaPaginada(rows.map(r => ({
+          ...r,
+          precio: Number(r.precio),
+          requiere_fecha: !!r.requiere_fecha
+        })), total, page, limit);
+      } finally {
+        conn.release();
+      }
+    });
+    res.json(data);
   } catch (err) {
     console.error('Error listando productos:', err.message);
     res.status(500).json({ error: 'No se pudieron cargar los productos' });
@@ -331,10 +388,11 @@ app.post('/api/admin/categories', requireAdmin, async (req, res) => {
     try {
       const [exists] = await conn.query('SELECT id FROM categories WHERE nombre = ?', [nombre]);
       if (exists.length) return res.status(400).json({ error: 'Ya existe una categoría con ese nombre' });
-      const [result] = await conn.query(
+const [result] = await conn.query(
         'INSERT INTO categories (nombre, descripcion, icono, color) VALUES (?, ?, ?, ?)',
         [nombre, descripcion || null, icono, color]
       );
+      invalidarCatalogo();
       res.json({ message: 'Categoría creada', id: result.insertId });
     } finally {
       conn.release();
@@ -364,9 +422,10 @@ app.put('/api/admin/categories/:id', requireAdmin, async (req, res) => {
       const [dup] = await conn.query('SELECT id FROM categories WHERE nombre = ? AND id != ?', [nombre, id]);
       if (dup.length) return res.status(400).json({ error: 'Ya existe otra categoría con ese nombre' });
       await conn.query('UPDATE categories SET nombre = ?, descripcion = ?, icono = ?, color = ? WHERE id = ?', [nombre, descripcion || null, icono, color, id]);
-      if (nombre !== nombreAnterior) {
+if (nombre !== nombreAnterior) {
         await conn.query('UPDATE products SET categoria = ? WHERE categoria = ?', [nombre, nombreAnterior]);
       }
+      invalidarCatalogo();
       res.json({ message: 'Categoría actualizada' });
     } finally {
       conn.release();
@@ -387,7 +446,8 @@ app.delete('/api/admin/categories/:id', requireAdmin, async (req, res) => {
       if (!rows.length) return res.json({ error: 'Categoría no encontrada' });
       const [prods] = await conn.query('SELECT COUNT(*) AS c FROM products WHERE categoria = ?', [rows[0].nombre]);
       if (prods[0].c > 0) return res.json({ error: `No se puede eliminar: tiene ${prods[0].c} producto(s) asociado(s). Cambia o elimina esos productos primero.` });
-      await conn.query('DELETE FROM categories WHERE id = ?', [id]);
+await conn.query('DELETE FROM categories WHERE id = ?', [id]);
+      invalidarCatalogo();
       res.json({ message: 'Categoría eliminada' });
     } finally {
       conn.release();
@@ -399,13 +459,16 @@ app.delete('/api/admin/categories/:id', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
+  const { page, limit, offset } = paginar(req.query, 15);
   try {
     const conn = await pool.getConnection();
     try {
+      const [[{ total }]] = await conn.query('SELECT COUNT(*) AS total FROM users');
       const [rows] = await conn.query(
-        'SELECT id, username, email, role, created_at FROM users ORDER BY id DESC'
+        'SELECT id, username, email, role, created_at FROM users ORDER BY id DESC LIMIT ? OFFSET ?',
+        [limit, offset]
       );
-      res.json(rows);
+      res.json(respuestaPaginada(rows, total, page, limit));
     } finally {
       conn.release();
     }
@@ -467,17 +530,66 @@ app.put('/api/admin/users/:id/role', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/admin/products', requireAdmin, async (req, res) => {
+  const { page, limit, offset } = paginar(req.query, 15);
   try {
     const conn = await pool.getConnection();
     try {
-      const [rows] = await conn.query('SELECT * FROM products ORDER BY categoria, id');
-      res.json(rows.map(r => ({ ...r, precio: Number(r.precio), requiere_fecha: !!r.requiere_fecha, activo: !!r.activo })));
+      const [[{ total }]] = await conn.query('SELECT COUNT(*) AS total FROM products');
+      const [rows] = await conn.query(
+        'SELECT * FROM products ORDER BY categoria, id LIMIT ? OFFSET ?',
+        [limit, offset]
+      );
+      res.json(respuestaPaginada(
+        rows.map(r => ({ ...r, precio: Number(r.precio), requiere_fecha: !!r.requiere_fecha, activo: !!r.activo })),
+        total, page, limit
+      ));
     } finally {
       conn.release();
     }
   } catch (err) {
     console.error('Error listando productos admin:', err.message);
     res.status(500).json({ error: 'No se pudieron cargar los productos' });
+  }
+});
+
+// Subida de imagen de producto (multer + sharp -> WebP optimizado)
+app.post('/api/admin/products/:id/image', requireAdmin, uploadImagen.single('imagen'), async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.json({ error: 'ID inválido' });
+  if (!req.file) return res.status(400).json({ error: 'Selecciona una imagen' });
+  if (!(req.file.mimetype || '').startsWith('image/')) {
+    return res.status(400).json({ error: 'El archivo debe ser una imagen' });
+  }
+  try {
+    // Verificar que el producto exista (sin retener la conexión durante el procesamiento)
+    const conn = await pool.getConnection();
+    let existe = false;
+    try {
+      const [rows] = await conn.query('SELECT id FROM products WHERE id = ?', [id]);
+      existe = rows.length > 0;
+    } finally {
+      conn.release();
+    }
+    if (!existe) return res.json({ error: 'Producto no encontrado' });
+
+    const filename = `${id}.webp`;
+    await sharp(req.file.buffer)
+      .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(path.join(PRODUCT_IMG_DIR, filename));
+
+    const conn2 = await pool.getConnection();
+    try {
+      await conn2.query('UPDATE products SET imagen = ? WHERE id = ?', [`/img/products/${filename}`, id]);
+    } finally {
+      conn2.release();
+    }
+
+    invalidarCatalogo();
+    res.json({ message: 'Imagen actualizada', imagen: `/img/products/${filename}` });
+  } catch (err) {
+    console.error('Error procesando imagen:', err.message);
+    res.status(500).json({ error: 'No se pudo procesar la imagen' });
   }
 });
 
@@ -491,10 +603,11 @@ app.post('/api/admin/products', requireAdmin, async (req, res) => {
     try {
       const [catExists] = await conn.query('SELECT id FROM categories WHERE nombre = ?', [p.categoria]);
       if (!catExists.length) return res.status(400).json({ error: 'La categoría no existe' });
-      const [result] = await conn.query(
+const [result] = await conn.query(
         'INSERT INTO products (nombre, categoria, precio, descripcion, imagen, requiere_fecha, activo) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [p.nombre, p.categoria, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo]
       );
+      invalidarCatalogo();
       res.json({ message: 'Producto creado', id: result.insertId });
     } finally {
       conn.release();
@@ -521,7 +634,8 @@ app.put('/api/admin/products/:id', requireAdmin, async (req, res) => {
         'UPDATE products SET nombre = ?, categoria = ?, precio = ?, descripcion = ?, imagen = ?, requiere_fecha = ?, activo = ? WHERE id = ?',
         [p.nombre, p.categoria, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo, id]
       );
-      if (result.affectedRows === 0) return res.json({ error: 'Producto no encontrado' });
+if (result.affectedRows === 0) return res.json({ error: 'Producto no encontrado' });
+      invalidarCatalogo();
       res.json({ message: 'Producto actualizado' });
     } finally {
       conn.release();
@@ -538,8 +652,9 @@ app.delete('/api/admin/products/:id', requireAdmin, async (req, res) => {
   try {
     const conn = await pool.getConnection();
     try {
-      const [result] = await conn.query('DELETE FROM products WHERE id = ?', [id]);
+const [result] = await conn.query('DELETE FROM products WHERE id = ?', [id]);
       if (result.affectedRows === 0) return res.json({ error: 'Producto no encontrado' });
+      invalidarCatalogo();
       res.json({ message: 'Producto eliminado' });
     } finally {
       conn.release();

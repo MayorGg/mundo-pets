@@ -1,6 +1,12 @@
 // URL base del backend (asegúrate de levantar el servidor en este puerto)
 const API_BASE_URL = 'http://localhost:5000';
 
+function esc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 // Base de datos de productos (fallback local si la API no está disponible)
 const PRODUCTOS_LOCALES = {
   alimentos: [
@@ -281,11 +287,12 @@ function renderCalendarioServicio() {
 
 async function cargarProductos() {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/products`);
+    const res = await fetch(`${API_BASE_URL}/api/products?limit=200`);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
+    const items = Array.isArray(data) ? data : (data.items || []);
     PRODUCTOS = {};
-    data.forEach(p => {
+    items.forEach(p => {
       const key = p.categoria
         .toLowerCase()
         .normalize('NFD')
@@ -565,15 +572,19 @@ function showProducts(categoria) {
     const args = conAgenda
       ? `${producto.id}, '${producto.nombre}', ${producto.precio}, true`
       : `${producto.id}, '${producto.nombre}', ${producto.precio}`;
+    const img = producto.imagen
+      ? `<img src="${esc(producto.imagen)}" alt="${esc(producto.nombre)}" loading="lazy" class="absolute inset-0 h-full w-full object-cover" onerror="this.remove()">`
+      : '';
     productosHTML += `
       <div class="product-card h-full">
         <div class="relative flex h-28 items-center justify-center ${bandClass}">
           <i class="fas ${bandIcon} fa-3x text-white/85"></i>
-          <span class="absolute top-2 right-3 text-xs font-semibold text-white/90">${producto.categoria}</span>
+          <span class="absolute top-2 right-3 text-xs font-semibold text-white/90">${esc(producto.categoria)}</span>
+          ${img}
         </div>
         <div class="flex flex-1 flex-col p-4 text-center">
-          <h3 class="mb-1 text-lg font-bold text-brand">${producto.nombre}</h3>
-          <p class="mb-2 text-sm text-muted">${producto.descripcion}</p>
+          <h3 class="mb-1 text-lg font-bold text-brand">${esc(producto.nombre)}</h3>
+          <p class="mb-2 text-sm text-muted">${esc(producto.descripcion)}</p>
           <div class="product-price mb-3">
             <span class="text-xl font-bold text-success">$${producto.precio.toLocaleString()}</span>
           </div>
