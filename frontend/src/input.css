@@ -19,6 +19,8 @@
 
   --shadow-card: 0 18px 50px rgba(10, 50, 52, 0.18);
   --shadow-card-hover: 0 24px 56px rgba(10, 50, 52, 0.24);
+  --motion-standard: 220ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @layer base {
@@ -49,6 +51,15 @@
   textarea:focus-visible {
     outline: 3px solid rgba(14, 124, 123, 0.55);
     outline-offset: 2px;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition-duration: var(--motion-standard);
+    transition-timing-function: var(--motion-ease);
   }
 
   ::-webkit-scrollbar {
@@ -108,7 +119,7 @@
     border-radius: 0.85rem;
     background: rgba(255, 255, 255, 0.85);
     color: var(--color-ink);
-    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    transition: border-color var(--motion-standard) var(--motion-ease), box-shadow var(--motion-standard) var(--motion-ease);
   }
 
   .input-field:focus {
@@ -137,7 +148,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    transition: transform 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+    transition: transform var(--motion-standard) var(--motion-ease), box-shadow var(--motion-standard) var(--motion-ease), background-color var(--motion-standard) var(--motion-ease), color var(--motion-standard) var(--motion-ease), border-color var(--motion-standard) var(--motion-ease);
   }
 
   .btn-brand {
@@ -280,7 +291,7 @@
   .catalog-card {
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    transition: transform var(--motion-standard) var(--motion-ease), box-shadow var(--motion-standard) var(--motion-ease);
     cursor: pointer;
     overflow: hidden;
     position: relative;
@@ -301,7 +312,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    transition: transform 0.25s ease;
+    transition: transform var(--motion-standard) var(--motion-ease);
     position: relative;
     z-index: 2;
   }
@@ -320,7 +331,7 @@
   .product-card {
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    transition: transform var(--motion-standard) var(--motion-ease), box-shadow var(--motion-standard) var(--motion-ease);
     overflow: hidden;
     background: #fff;
     display: flex;
@@ -342,7 +353,7 @@
     padding: 1rem;
     border-radius: var(--radius-card);
     background: transparent;
-    transition: transform 0.25s ease;
+    transition: transform var(--motion-standard) var(--motion-ease);
   }
 
   .benefit-item:hover {
@@ -369,7 +380,7 @@
     border-radius: var(--radius-card);
     padding: 1.25rem;
     font-weight: 600;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    transition: transform var(--motion-standard) var(--motion-ease), box-shadow var(--motion-standard) var(--motion-ease);
     border-width: 1.5px;
     background: #fff;
     color: var(--color-brand);
@@ -399,7 +410,7 @@
     box-shadow: 0 2rem 4rem rgba(10, 50, 52, 0.28);
     background: #fff;
     overflow: hidden;
-    animation: modalIn 0.28s ease both;
+    animation: modalIn var(--motion-standard) var(--motion-ease) both;
   }
 
   .modal-header-bar {
@@ -415,7 +426,7 @@
     height: 2.25rem;
     border-radius: 9999px;
     color: rgba(255, 255, 255, 0.9);
-    transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+    transition: color var(--motion-standard) var(--motion-ease), background-color var(--motion-standard) var(--motion-ease), transform var(--motion-standard) var(--motion-ease);
   }
 
   .modal-close:hover {
@@ -556,6 +567,49 @@
     color: var(--color-brand-dark);
     font-weight: 600;
   }
+
+  .skeleton {
+    background: linear-gradient(100deg, rgba(232, 245, 244, 0.7) 25%, rgba(255, 255, 255, 0.95) 50%, rgba(232, 245, 244, 0.7) 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.35s var(--motion-ease) infinite;
+    border-radius: 0.5rem;
+  }
+
+  .skeleton-line {
+    height: 0.85rem;
+  }
+
+  .skeleton-line-lg {
+    height: 1.35rem;
+  }
+
+  .empty-state {
+    min-height: 210px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 0.5rem;
+    color: var(--color-muted);
+    text-align: center;
+  }
+
+  .empty-state-icon {
+    display: grid;
+    place-items: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 50%;
+    background: var(--color-brand-soft);
+    color: var(--color-brand);
+  }
+
+  .cart-bump {
+    animation: cartBump 420ms var(--motion-ease);
+  }
+
+  .modal-scroll-lock {
+    overscroll-behavior: contain;
+  }
 }
 
 @keyframes fadeInUp {
@@ -589,6 +643,27 @@
   }
 }
 
+@keyframes skeletonShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes cartBump {
+  0%, 100% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.24);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+}
+
 @media (hover: none) and (pointer: coarse) {
   .catalog-card:hover,
   .btn-brand:hover,
@@ -616,6 +691,20 @@
 }
 
 @media (max-width: 576px) {
+  .modal-panel {
+    max-height: calc(100vh - 1rem);
+    border-radius: 1rem;
+  }
+
+  .modal-panel > .overflow-y-auto,
+  .modal-panel > .flex-1 {
+    min-height: 0;
+  }
+
+  .checkout-summary {
+    padding: 1rem;
+  }
+
   .cal-cell {
     min-height: 36px;
     font-size: 0.85rem;

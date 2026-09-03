@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 2 de septiembre de 2026 — Fase 0 de seguridad (bcrypt, JWT + refresh, CORS, rate limiting), Fase Infraestructura (helmet, compression, cache-control, PM2, backups, Nginx/Let's Encrypt) y Fase Procesamiento (imágenes con sharp, paginación, caché, índices).  
+> **Última actualización:** 2 de septiembre de 2026 — Fase 0 de seguridad (bcrypt, JWT + refresh, CORS, rate limiting), Fase Infraestructura (helmet, compression, cache-control, PM2, backups, Nginx/Let's Encrypt), Fase Procesamiento (imágenes con sharp, paginación, caché, índices) y Fase Visualización y diseño (feedback de carga, estados vacíos, movimiento, responsive y accesibilidad).
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -668,3 +668,38 @@ Objetivo: que el backend no se vuelva el cuello de botella cuando crezca el cat�
 - Caché: al crear un producto aparece al instante en el catálogo público (invalidación OK).
 - Índices: confirmados en `SHOW INDEX`.
 - Navegador: `<img loading="lazy">` en la tienda, miniatura en admin, sin errores de consola.
+
+## 19. Visualización y diseño (Fase Visualización y diseño)
+
+Objetivo: mejorar la percepción de respuesta, la coherencia del movimiento, la adaptación móvil y la accesibilidad de las vistas públicas y administrativas sin cambiar el flujo funcional existente.
+
+### Archivos modificados
+
+- `frontend/src/input.css`: variables de duración y curva de movimiento, transiciones compartidas, skeletons, estados vacíos, animaciones y reglas responsive para modales.
+- `frontend/dist/tailwind.css`: salida recompilada mediante `npm run build:css`.
+- `frontend/script.js`: skeleton temporal para precios, helper de estados vacíos, estado vacío del carrito, animación del contador y escape de nombres dinámicos.
+- `frontend/admin.js`: skeletons de filas para productos, categorías y usuarios durante las peticiones a la API y foco atrapado en modales.
+- `frontend/index.html`, `frontend/login.html`, `frontend/register.html`, `frontend/dashboard.html` y `frontend/admin.html`: versionado de CSS/JavaScript con `?v=3` para evitar servir recursos anteriores desde caché.
+
+### Cambios visuales y de interacción
+
+- **Carga:** el dashboard muestra placeholders animados mientras consulta los precios y el panel admin muestra filas skeleton en las tablas de productos, categorías y usuarios.
+- **Estados vacíos:** el carrito usa un mensaje reutilizable con iconografía de huella y una indicación clara para volver al catálogo. Se dejó un helper común para otros listados.
+- **Movimiento unificado:** botones, campos, tarjetas, paneles, cierres y modales comparten una duración de 220 ms y una curva `cubic-bezier(0.22, 1, 0.36, 1)`. Se conserva el bloqueo de animaciones para usuarios con `prefers-reduced-motion`.
+- **Microinteracción:** el contador del carrito ejecuta `cart-bump` al actualizarse, con reinicio controlado de la animación para que también funcione en incrementos consecutivos.
+- **Responsive móvil:** los modales limitan su altura al viewport, mantienen el contenido desplazable y reducen el padding del resumen de checkout en pantallas pequeñas.
+- **Accesibilidad:** los modales responden a `Escape`, mantienen el foco dentro del panel durante la navegación con `Tab` y conservan `:focus-visible`. Las imágenes del catálogo ya usan `alt` descriptivo y carga diferida. Los skeletons se marcan como contenido no interactivo mediante `aria-hidden`.
+- **Tipografía:** las páginas ya cargaban Google Fonts con `display=swap`; esta fase conserva esa estrategia para evitar texto invisible durante la carga.
+
+### Verificación realizada
+
+- `node --check frontend/script.js`: correcto.
+- `node --check frontend/admin.js`: correcto.
+- `npm run build:css` desde `frontend`: correcto con Tailwind CSS 4.3.3.
+- Navegador local en `http://localhost:5000/index.html`: respuesta HTTP 200, título `Mundo Pets`, CSS `v=3`, cero errores de consola y cero solicitudes fallidas.
+- Captura visual de la página de entrada: composición legible en escritorio, con la imagen de marca, botones y área de contacto renderizados correctamente.
+
+### Alcance pendiente
+
+- No se automatizó un flujo autenticado de dashboard o admin porque requiere credenciales y datos de API disponibles en el entorno de ejecución.
+- El fallback visual de imágenes y los estados de error de API ya existentes no se rediseñaron en esta fase; el trabajo se concentró en carga, vacío, movimiento, responsive y foco.

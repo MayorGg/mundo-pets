@@ -87,6 +87,7 @@ function openModal(id) {
   lastFocused = document.activeElement;
   const focusable = el.querySelector('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
   if (focusable) focusable.focus();
+  el.dataset.previousFocus = lastFocused && lastFocused.id ? lastFocused.id : '';
 }
 
 function closeModal(id) {
@@ -99,13 +100,50 @@ function closeModal(id) {
   if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
 }
 
+function renderProductSkeletons(count = 4) {
+  return Array.from({ length: count }, () => `
+    <div class="product-card p-4" aria-hidden="true">
+      <div class="skeleton mb-4 h-28 w-full"></div>
+      <div class="skeleton skeleton-line-lg mb-3 w-3/4"></div>
+      <div class="skeleton skeleton-line mb-2 w-full"></div>
+      <div class="skeleton skeleton-line mb-4 w-2/3"></div>
+      <div class="skeleton h-10 w-full"></div>
+    </div>
+  `).join('');
+}
+
+function renderEmptyState(icon, title, message) {
+  return `
+    <div class="empty-state col-span-full">
+      <div class="empty-state-icon" aria-hidden="true"><i class="fas ${icon} fa-2x"></i></div>
+      <strong class="text-brand">${title}</strong>
+      <span class="text-sm">${message}</span>
+    </div>
+  `;
+}
+
 // Cerrar modales con Escape
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  MODALS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el && !el.classList.contains('hidden')) closeModal(id);
-  });
+  const open = MODALS.map(id => document.getElementById(id))
+    .find(el => el && !el.classList.contains('hidden'));
+  if (!open) return;
+  if (e.key === 'Escape') {
+    closeModal(open.id);
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focusable = [...open.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  if (focusable.length < 2) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 });
 
 // Limpiar errores de campo al escribir
@@ -286,6 +324,11 @@ function renderCalendarioServicio() {
 }
 
 async function cargarProductos() {
+  const prices = ['precio-alimentos', 'precio-medicamentos', 'precio-peluqueria', 'precio-guarderia'];
+  prices.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="skeleton skeleton-line inline-block w-28 align-middle"></span>';
+  });
   try {
     const res = await fetch(`${API_BASE_URL}/api/products?limit=200`);
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -643,7 +686,12 @@ function agregarAlCarrito(id, nombre, precio, requiereFecha) {
 
 function actualizarContadorCarrito() {
   const totalItems = carrito.reduce((total, item) => total + item.cantidad, 0);
-  document.getElementById('cart-count').textContent = totalItems;
+  const counter = document.getElementById('cart-count');
+  if (!counter) return;
+  counter.textContent = totalItems;
+  counter.classList.remove('cart-bump');
+  void counter.offsetWidth;
+  counter.classList.add('cart-bump');
 }
 
 function showCart() {
@@ -652,9 +700,10 @@ function showCart() {
 
   if (carrito.length === 0) {
     cartItems.innerHTML = `
-      <div class="py-10 text-center">
-        <i class="fas fa-shopping-cart mb-3 text-4xl text-muted"></i>
-        <p class="text-muted">Tu carrito está vacío</p>
+      <div class="empty-state">
+        <div class="empty-state-icon" aria-hidden="true"><i class="fas fa-paw fa-2x"></i></div>
+        <strong class="text-brand">Tu carrito está vacío</strong>
+        <span class="text-sm">Explora el catálogo y encuentra algo especial para tu mascota.</span>
       </div>
     `;
     cartTotal.textContent = '0';
@@ -670,21 +719,21 @@ function showCart() {
         <div class="mb-3 rounded-card border border-gray-100 bg-white p-4 shadow-sm">
           <div class="flex flex-wrap items-center gap-3">
             <div class="min-w-0 flex-1">
-              <h5 class="mb-1 font-bold">${item.nombre}</h5>
+              <h5 class="mb-1 font-bold">${esc(item.nombre)}</h5>
               <p class="mb-0 text-muted">$${item.precio.toLocaleString()} x ${item.cantidad}</p>
               ${item.fecha ? `<p class="mt-1 mb-0 text-sm text-brand"><i class="fas fa-calendar-day mr-1"></i>${formatearFechaCO(item.fecha)}</p>` : ''}
             </div>
             <div class="flex items-center gap-2">
-              <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Disminuir cantidad de ${item.nombre}">
+              <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Disminuir cantidad de ${esc(item.nombre)}">
                 <i class="fas fa-minus"></i>
               </button>
               <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-semibold">${item.cantidad}</span>
-              <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Aumentar cantidad de ${item.nombre}">
+              <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Aumentar cantidad de ${esc(item.nombre)}">
                 <i class="fas fa-plus"></i>
               </button>
             </div>
             <div class="text-center font-bold text-success">$${subtotal.toLocaleString()}</div>
-            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar ${item.nombre} del carrito">
+            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar ${esc(item.nombre)} del carrito">
               <i class="fas fa-trash"></i>
             </button>
           </div>

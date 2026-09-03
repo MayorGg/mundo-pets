@@ -10,6 +10,14 @@ let usuariosPagina = 1;
 let usuariosPages = 1;
 let productoImagenFile = null;
 
+function renderAdminTableSkeleton(columnas, filas = 4) {
+  return Array.from({ length: filas }, () => `
+    <tr aria-hidden="true">
+      ${Array.from({ length: columnas }, () => '<td class="px-4 py-3"><div class="skeleton skeleton-line w-full"></div></td>').join('')}
+    </tr>
+  `).join('');
+}
+
 function getToken() {
   return localStorage.getItem('authToken');
 }
@@ -82,11 +90,26 @@ function closeModal(id) {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  ['productoModal', 'categoriaModal', 'usuarioModal'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el && !el.classList.contains('hidden')) closeModal(id);
-  });
+  const open = ['productoModal', 'categoriaModal', 'usuarioModal'].map(id => document.getElementById(id))
+    .find(el => el && !el.classList.contains('hidden'));
+  if (!open) return;
+  if (e.key === 'Escape') {
+    closeModal(open.id);
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focusable = [...open.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  if (focusable.length < 2) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 });
 
 // Navegación entre secciones
@@ -134,6 +157,8 @@ async function cargarStats() {
 
 // Productos
 async function cargarProductosAdmin(page = productosPagina) {
+  const tbody = document.getElementById('tbody-productos');
+  if (tbody) tbody.innerHTML = renderAdminTableSkeleton(8);
   try {
     const data = await apiFetch(`/api/admin/products?page=${page}&limit=15`);
     productosAdmin = data.items || [];
@@ -357,6 +382,8 @@ function eliminarProducto(id) {
 
 // Categorías
 async function cargarCategorias() {
+  const tbody = document.getElementById('tbody-categorias');
+  if (tbody) tbody.innerHTML = renderAdminTableSkeleton(7);
   try {
     const data = await apiFetch('/api/admin/categories');
     categoriasAdmin = data;
@@ -507,6 +534,8 @@ function eliminarCategoria(id) {
 
 // Usuarios
 async function cargarUsuarios(page = usuariosPagina) {
+  const tbody = document.getElementById('tbody-usuarios');
+  if (tbody) tbody.innerHTML = renderAdminTableSkeleton(6);
   try {
     const data = await apiFetch(`/api/admin/users?page=${page}&limit=15`);
     usuariosAdmin = data.items || [];
