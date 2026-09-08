@@ -29,6 +29,7 @@ jobs:
       DB_USER: root
       DB_PASSWORD: test
       DB_NAME: mundo_pets
+      DATABASE_URL: mysql://root:test@127.0.0.1:3306/mundo_pets
       JWT_SECRET: ci-secret-de-prueba
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +40,12 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - name: Instalar dependencias
         run: npm --prefix backend ci
+      - name: Generar cliente Prisma
+        run: npx prisma generate
+        working-directory: backend
+      - name: Crear esquema (prisma db push)
+        run: npx prisma db push
+        working-directory: backend
       - name: Typecheck (tsc --noEmit)
         run: npm --prefix backend run typecheck
       - name: Crear esquema y datos base (seed)

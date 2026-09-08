@@ -793,7 +793,7 @@ Las pruebas crean datos con nombres únicos (`test_*`) y los limpian en `afterAl
 
 ### CI en GitHub Actions (`.github/workflows/ci.yml`)
 
-- **Backend:** servicio MySQL 8 (healthcheck), `npm ci`, `typecheck` (`tsc --noEmit`), `node backend/seed.js` (esquema + datos base) y `npm run test`.
+- **Backend:** servicio MySQL 8 (healthcheck), `npm ci`, `prisma generate` + `prisma db push` (crea el esquema sobre la BD vacía del job), `typecheck` (`tsc --noEmit`), `node backend/seed.js` (datos base) y `npm run test`. `seed.js` además crea la tabla `users` si no existe, para no depender de una BD pre-sembrada.
 - **Frontend:** `npm ci` y `npm run build:css` (valida que el CSS de Tailwind compile).
 - Se ejecuta en cada push (todas las ramas) y pull request.
 
