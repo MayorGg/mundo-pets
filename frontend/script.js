@@ -1,8 +1,14 @@
-// URL base del backend (asegúrate de levantar el servidor en este puerto)
-const API_BASE_URL = 'http://localhost:5000';
+// En producción la API se sirve desde el mismo origen; el fallback permite abrir el frontend localmente.
+const API_BASE_URL = window.location.protocol === 'file:' ? 'http://localhost:5000' : window.location.origin;
 
-// Base de datos de productos
-const PRODUCTOS = {
+function esc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+// Base de datos de productos (fallback local si la API no está disponible)
+const PRODUCTOS_LOCALES = {
   alimentos: [
     { id: 1, nombre: "Croquetas Premium", precio: 45000, descripcion: "Alimento balanceado para perros adultos", imagen: "alimento.jpg", categoria: "Alimentos" },
     { id: 2, nombre: "Comida Húmeda Gatos", precio: 15000, descripcion: "Pate de salmón para gatos", imagen: "alimento.jpg", categoria: "Alimentos" },
@@ -28,6 +34,8 @@ const PRODUCTOS = {
     { id: 16, nombre: "Entrenamiento", precio: 50000, descripcion: "Sesión de entrenamiento básico", imagen: "guarderia.jpg", categoria: "Guardería" }
   ]
 };
+
+let PRODUCTOS = {};
 
 // Calendario laboral Colombia 2026 (festivos oficiales, incl. Ley Emiliani)
 const FESTIVOS_CO_2026 = {
@@ -59,11 +67,135 @@ const MESES_ES = [
 const DIAS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const CATEGORIAS_CON_AGENDA = ['peluqueria', 'guarderia'];
 
-let carrito = [];
+let carrito = (() => {
+  try {
+    const guardado = JSON.parse(localStorage.getItem('mundoPetsCart') || '[]');
+    return Array.isArray(guardado) ? guardado : [];
+  } catch {
+    return [];
+  }
+})();
 let metodoPagoSeleccionado = null;
 let fechaServicioSeleccionada = null;
 let calendarioMes = 7;
 let categoriaServicioActual = null;
+
+// Gestión de modales sin Bootstrap
+const MODALS = ['productsModal', 'cartModal', 'checkoutModal'];
+let lastFocused = null;
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.classList.add('flex');
+  el.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  lastFocused = document.activeElement;
+  const focusable = el.querySelector('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (focusable) focusable.focus();
+  el.dataset.previousFocus = lastFocused && lastFocused.id ? lastFocused.id : '';
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('hidden');
+  el.classList.remove('flex');
+  el.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+}
+
+function renderProductSkeletons(count = 4) {
+  return Array.from({ length: count }, () => `
+    <div class="product-card p-4" aria-hidden="true">
+      <div class="skeleton mb-4 h-28 w-full"></div>
+      <div class="skeleton skeleton-line-lg mb-3 w-3/4"></div>
+      <div class="skeleton skeleton-line mb-2 w-full"></div>
+      <div class="skeleton skeleton-line mb-4 w-2/3"></div>
+      <div class="skeleton h-10 w-full"></div>
+    </div>
+  `).join('');
+}
+
+function renderEmptyState(icon, title, message) {
+  return `
+    <div class="empty-state col-span-full">
+      <div class="empty-state-icon" aria-hidden="true"><i class="fas ${icon} fa-2x"></i></div>
+      <strong class="text-brand">${title}</strong>
+      <span class="text-sm">${message}</span>
+    </div>
+  `;
+}
+
+// Cerrar modales con Escape
+document.addEventListener('keydown', (e) => {
+  const open = MODALS.map(id => document.getElementById(id))
+    .find(el => el && !el.classList.contains('hidden'));
+  if (!open) return;
+  if (e.key === 'Escape') {
+    closeModal(open.id);
+    return;
+  }
+  if (e.key !== 'Tab') return;
+  const focusable = [...open.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+  if (focusable.length < 2) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+});
+
+// Limpiar errores de campo al escribir
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', () => setFieldError(input.id, ''));
+  });
+});
+
+function togglePassword(inputId, iconId) {
+  const input = document.getElementById(inputId);
+  const icon = document.getElementById(iconId);
+  if (!input) return;
+  const esClave = input.type === 'password';
+  input.type = esClave ? 'text' : 'password';
+  if (icon) icon.className = esClave ? 'fas fa-eye-slash' : 'fas fa-eye';
+  const btn = icon && icon.closest('button');
+  if (btn) btn.setAttribute('aria-label', esClave ? 'Ocultar contraseña' : 'Mostrar contraseña');
+}
+
+function setFieldError(inputId, msg) {
+  const input = document.getElementById(inputId);
+  const err = document.getElementById(`${inputId}-err`);
+  if (!input) return;
+  if (msg) {
+    input.classList.add('input-error');
+    if (err) { err.textContent = msg; err.classList.remove('hidden'); }
+  } else {
+    input.classList.remove('input-error');
+    if (err) err.classList.add('hidden');
+  }
+}
+
+function setButtonLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  if (loading) {
+    btn.dataset.original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.original) btn.innerHTML = btn.dataset.original;
+  }
+}
 
 function fechaHoyBogota() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -166,18 +298,16 @@ function renderCalendarioServicio() {
 
   wrap.innerHTML = `
     <div class="service-calendar">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-          <h3 class="h5 text-primary mb-1">Agenda 2026 · Colombia</h3>
-          <p class="small text-muted mb-0">Elige el día del servicio. Festivos y domingos no están disponibles.</p>
-        </div>
+      <div class="mb-3">
+        <h3 class="mb-1 text-lg font-bold text-brand">Agenda 2026 · Colombia</h3>
+        <p class="mb-0 text-sm text-muted">Elige el día del servicio. Festivos y domingos no están disponibles.</p>
       </div>
       <div class="cal-nav">
-        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="cambiarMesCalendario(-1)" ${calendarioMes === 0 ? 'disabled' : ''}>
+        <button type="button" class="btn-brand-outline px-3 py-1.5 text-sm" onclick="cambiarMesCalendario(-1)" ${calendarioMes === 0 ? 'disabled' : ''}>
           ‹
         </button>
         <strong>${MESES_ES[calendarioMes]} ${anio}</strong>
-        <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" onclick="cambiarMesCalendario(1)" ${calendarioMes === 11 ? 'disabled' : ''}>
+        <button type="button" class="btn-brand-outline px-3 py-1.5 text-sm" onclick="cambiarMesCalendario(1)" ${calendarioMes === 11 ? 'disabled' : ''}>
           ›
         </button>
       </div>
@@ -194,10 +324,61 @@ function renderCalendarioServicio() {
         <span><i class="cal-swatch cal-swatch-sel"></i> Seleccionado</span>
       </div>
       <p class="cal-selected-label mt-3 mb-0">
-        <i class="fas fa-calendar-check me-2"></i>${fechaTexto}
+        <i class="fas fa-calendar-check mr-2"></i>${fechaTexto}
       </p>
     </div>
   `;
+}
+
+async function cargarProductos() {
+  const prices = ['precio-alimentos', 'precio-medicamentos', 'precio-peluqueria', 'precio-guarderia'];
+  prices.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="skeleton skeleton-line inline-block w-28 align-middle"></span>';
+  });
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/products?limit=200`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const items = Array.isArray(data) ? data : (data.items || []);
+    PRODUCTOS = {};
+    items.forEach(p => {
+      const key = p.categoria
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, '');
+      if (!PRODUCTOS[key]) PRODUCTOS[key] = [];
+      PRODUCTOS[key].push({
+        id: p.id,
+        nombre: p.nombre,
+        precio: Number(p.precio),
+        descripcion: p.descripcion,
+        imagen: p.imagen,
+        categoria: p.categoria
+      });
+    });
+  } catch (err) {
+    console.warn('No se pudo cargar productos desde la API, usando catálogo local:', err.message);
+    PRODUCTOS = { ...PRODUCTOS_LOCALES };
+  }
+  actualizarPreciosCatalogo();
+}
+
+function actualizarPreciosCatalogo() {
+  const mapa = {
+    alimentos: 'precio-alimentos',
+    medicamentos: 'precio-medicamentos',
+    peluqueria: 'precio-peluqueria',
+    guarderia: 'precio-guarderia'
+  };
+  Object.keys(mapa).forEach(key => {
+    const el = document.getElementById(mapa[key]);
+    const lista = PRODUCTOS[key];
+    if (!el || !lista || lista.length === 0) return;
+    const min = Math.min(...lista.map(p => p.precio));
+    el.innerHTML = `Desde $${min.toLocaleString()} <span class="font-normal text-muted">· ${lista.length} ${lista.length === 1 ? 'opción' : 'opciones'}</span>`;
+  });
 }
 
 // Verificar si el usuario está autenticado al cargar la página
@@ -206,6 +387,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (window.location.pathname.includes('dashboard.html')) {
     checkAuth();
     actualizarContadorCarrito();
+    cargarProductos();
   }
 });
 
@@ -227,19 +409,23 @@ function checkAuth() {
 
 // Función de login usando backend
 async function login() {
-  const identifier = document.getElementById('identifier').value;
+  const identifier = document.getElementById('identifier').value.trim();
   const password = document.getElementById('password').value;
 
+  setFieldError('identifier', '');
+  setFieldError('password', '');
+
   // Validaciones del frontend
-  if (!identifier || !password) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: 'Usuario/Email y contraseña son requeridos',
-      confirmButtonColor: '#3085d6'
-    });
+  if (!identifier) {
+    setFieldError('identifier', 'Ingresa tu usuario o correo');
     return;
   }
+  if (!password) {
+    setFieldError('password', 'Ingresa tu contraseña');
+    return;
+  }
+
+  setButtonLoading('loginBtn', true);
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/login`, {
@@ -264,8 +450,11 @@ async function login() {
 
     // Login exitoso
     localStorage.setItem('authToken', data.token);
+    if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
     localStorage.setItem('username', data.username || identifier);
-    
+    const role = data.role || 'user';
+    localStorage.setItem('role', role);
+
     Swal.fire({
       icon: 'success',
       title: '¡Bienvenido!',
@@ -273,7 +462,7 @@ async function login() {
       confirmButtonColor: '#28a745',
       confirmButtonText: 'Continuar'
     }).then(() => {
-      window.location.href = 'dashboard.html';
+      window.location.href = role === 'admin' ? 'admin.html' : 'dashboard.html';
     });
   } catch (error) {
     console.error('Error en login:', error);
@@ -283,37 +472,48 @@ async function login() {
       text: 'No se pudo conectar con el servidor',
       confirmButtonColor: '#3085d6'
     });
+  } finally {
+    setButtonLoading('loginBtn', false);
   }
 }
 
 // Función de registro usando backend
 async function register() {
-  const username = document.getElementById('newUsername').value;
-  const email = document.getElementById('newEmail').value;
+  const username = document.getElementById('newUsername').value.trim();
+  const email = document.getElementById('newEmail').value.trim();
   const password = document.getElementById('newPassword').value;
 
+  setFieldError('newUsername', '');
+  setFieldError('newEmail', '');
+  setFieldError('newPassword', '');
+
   // Validaciones del frontend
-  if (!username || !email || !password) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: 'Todos los campos son requeridos',
-      confirmButtonColor: '#3085d6'
-    });
+  if (!username) {
+    setFieldError('newUsername', 'Elige un nombre de usuario');
+    return;
+  }
+  if (!email) {
+    setFieldError('newEmail', 'Ingresa tu correo electrónico');
     return;
   }
 
   // Validar formato de email
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Error',
-      text: 'Formato de email inválido',
-      confirmButtonColor: '#3085d6'
-    });
+    setFieldError('newEmail', 'Formato de email inválido');
     return;
   }
+
+  if (!password) {
+    setFieldError('newPassword', 'Crea una contraseña');
+    return;
+  }
+  if (password.length < 6) {
+    setFieldError('newPassword', 'La contraseña debe tener al menos 6 caracteres');
+    return;
+  }
+
+  setButtonLoading('registerBtn', true);
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/register`, {
@@ -353,6 +553,8 @@ async function register() {
       text: 'No se pudo conectar con el servidor',
       confirmButtonColor: '#3085d6'
     });
+  } finally {
+    setButtonLoading('registerBtn', false);
   }
 }
 
@@ -370,8 +572,10 @@ function logout() {
     if (result.isConfirmed) {
       // Limpiar datos de autenticación
       localStorage.removeItem('authToken');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('username');
-      
+      localStorage.removeItem('role');
+
       Swal.fire({
         icon: 'success',
         title: 'Sesión cerrada',
@@ -387,57 +591,67 @@ function logout() {
 
 // Funciones del catálogo
 function showProducts(categoria) {
-  const modal = new bootstrap.Modal(document.getElementById('productsModal'));
   const modalTitle = document.getElementById('modalTitle');
   const productsContainer = document.getElementById('productsContainer');
   const productos = PRODUCTOS[categoria];
   const conAgenda = CATEGORIAS_CON_AGENDA.includes(categoria);
+
+  if (!productos || productos.length === 0) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Sin productos',
+      text: 'Esta categoría no tiene productos disponibles por el momento',
+      confirmButtonColor: '#3085d6'
+    });
+    return;
+  }
 
   categoriaServicioActual = conAgenda ? categoria : null;
   fechaServicioSeleccionada = null;
   calendarioMes = mesInicialCalendario();
 
   modalTitle.innerHTML = conAgenda
-    ? `<i class="fas fa-calendar-alt me-2"></i>${productos[0].categoria} · Reservar fecha`
-    : `<i class="fas fa-boxes me-2"></i>Productos de ${productos[0].categoria}`;
+    ? `<i class="fas fa-calendar-alt mr-2"></i>${productos[0].categoria} · Reservar fecha`
+    : `<i class="fas fa-boxes mr-2"></i>Productos de ${productos[0].categoria}`;
 
   let productosHTML = '';
+  const bandClass = { alimentos: 'bg-warn', medicamentos: 'bg-danger', peluqueria: 'bg-info', guarderia: 'bg-success' }[categoria] || 'bg-brand';
+  const bandIcon = { alimentos: 'fa-bone', medicamentos: 'fa-pills', peluqueria: 'fa-cut', guarderia: 'fa-home' }[categoria] || 'fa-box';
+
   productos.forEach(producto => {
     const args = conAgenda
       ? `${producto.id}, '${producto.nombre}', ${producto.precio}, true`
       : `${producto.id}, '${producto.nombre}', ${producto.precio}`;
+    const img = producto.imagen
+      ? `<img src="${esc(producto.imagen)}" alt="${esc(producto.nombre)}" loading="lazy" class="absolute inset-0 h-full w-full object-cover" onerror="this.remove()">`
+      : '';
     productosHTML += `
-      <div class="col-lg-4 col-md-6 col-sm-12">
-        <div class="card product-card h-100 shadow-hover">
-          <div class="card-body text-center p-4">
-            <div class="product-icon mb-3">
-              <i class="fas fa-box fa-3x text-primary"></i>
-            </div>
-            <h3 class="card-title h5 text-primary">${producto.nombre}</h3>
-            <p class="card-text text-muted small">${producto.descripcion}</p>
-            <div class="product-price mb-3">
-              <span class="h4 fw-bold text-success">$${producto.precio.toLocaleString()}</span>
-            </div>
-            <button onclick="agregarAlCarrito(${args})" class="btn btn-success w-100">
-              <i class="fas fa-cart-plus me-2"></i>${conAgenda ? 'Reservar' : 'Agregar al Carrito'}
-            </button>
+      <div class="product-card h-full">
+        <div class="relative flex h-28 items-center justify-center ${bandClass}">
+          <i class="fas ${bandIcon} fa-3x text-white/85"></i>
+          <span class="absolute top-2 right-3 text-xs font-semibold text-white/90">${esc(producto.categoria)}</span>
+          ${img}
+        </div>
+        <div class="flex flex-1 flex-col p-4 text-center">
+          <h3 class="mb-1 text-lg font-bold text-brand">${esc(producto.nombre)}</h3>
+          <p class="mb-2 text-sm text-muted">${esc(producto.descripcion)}</p>
+          <div class="product-price mb-3">
+            <span class="text-xl font-bold text-success">$${producto.precio.toLocaleString()}</span>
           </div>
+          <button onclick="agregarAlCarrito(${args})" class="btn-brand-success mt-auto w-full py-2.5">
+            <i class="fas fa-cart-plus mr-2"></i>${conAgenda ? 'Reservar' : 'Agregar al Carrito'}
+          </button>
         </div>
       </div>
     `;
   });
 
   productsContainer.innerHTML = conAgenda
-    ? `<div class="col-12" id="calendarWrap"></div><div class="col-12"><div class="row g-4">${productosHTML}</div></div>`
+    ? `<div class="col-span-full" id="calendarWrap"></div><div class="col-span-full grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">${productosHTML}</div>`
     : productosHTML;
 
   if (conAgenda) renderCalendarioServicio();
-  modal.show();
-}
-
-function closeModal() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('productsModal'));
-  if (modal) modal.hide();
+  openModal('productsModal');
 }
 
 // Funciones del carrito
@@ -479,74 +693,67 @@ function agregarAlCarrito(id, nombre, precio, requiereFecha) {
 
 function actualizarContadorCarrito() {
   const totalItems = carrito.reduce((total, item) => total + item.cantidad, 0);
-  document.getElementById('cart-count').textContent = totalItems;
+  localStorage.setItem('mundoPetsCart', JSON.stringify(carrito));
+  const counter = document.getElementById('cart-count');
+  if (!counter) return;
+  counter.textContent = totalItems;
+  counter.classList.remove('cart-bump');
+  void counter.offsetWidth;
+  counter.classList.add('cart-bump');
 }
 
 function showCart() {
-  const modal = new bootstrap.Modal(document.getElementById('cartModal'));
   const cartItems = document.getElementById('cartItems');
   const cartTotal = document.getElementById('cartTotal');
-  
+
   if (carrito.length === 0) {
     cartItems.innerHTML = `
-      <div class="text-center py-5">
-        <i class="fas fa-shopping-cart fa-4x text-muted mb-3"></i>
-        <p class="text-muted">Tu carrito está vacío</p>
+      <div class="empty-state">
+        <div class="empty-state-icon" aria-hidden="true"><i class="fas fa-paw fa-2x"></i></div>
+        <strong class="text-brand">Tu carrito está vacío</strong>
+        <span class="text-sm">Explora el catálogo y encuentra algo especial para tu mascota.</span>
       </div>
     `;
     cartTotal.textContent = '0';
   } else {
     let itemsHTML = '';
     let total = 0;
-    
+
     carrito.forEach(item => {
       const subtotal = item.precio * item.cantidad;
       total += subtotal;
-      
+
       itemsHTML += `
-        <div class="card mb-3">
-          <div class="card-body">
-            <div class="row align-items-center">
-              <div class="col-md-4">
-                <h5 class="card-title mb-1">${item.nombre}</h5>
-                <p class="text-muted mb-0">$${item.precio.toLocaleString()} x ${item.cantidad}</p>
-                ${item.fecha ? `<p class="small text-primary mb-0 mt-1"><i class="fas fa-calendar-day me-1"></i>${formatearFechaCO(item.fecha)}</p>` : ''}
-              </div>
-              <div class="col-md-4 text-center">
-                <div class="btn-group" role="group">
-                  <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn btn-outline-primary btn-sm">
-                    <i class="fas fa-minus"></i>
-                  </button>
-                  <span class="btn btn-outline-secondary btn-sm disabled">${item.cantidad}</span>
-                  <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn btn-outline-primary btn-sm">
-                    <i class="fas fa-plus"></i>
-                  </button>
-                </div>
-              </div>
-              <div class="col-md-2 text-center">
-                <span class="h6 text-success">$${subtotal.toLocaleString()}</span>
-              </div>
-              <div class="col-md-2 text-center">
-                <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="btn btn-outline-danger btn-sm">
-                  <i class="fas fa-trash"></i>
-                </button>
-              </div>
+        <div class="mb-3 rounded-card border border-gray-100 bg-white p-4 shadow-sm">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="min-w-0 flex-1">
+              <h5 class="mb-1 font-bold">${esc(item.nombre)}</h5>
+              <p class="mb-0 text-muted">$${item.precio.toLocaleString()} x ${item.cantidad}</p>
+              ${item.fecha ? `<p class="mt-1 mb-0 text-sm text-brand"><i class="fas fa-calendar-day mr-1"></i>${formatearFechaCO(item.fecha)}</p>` : ''}
             </div>
+            <div class="flex items-center gap-2">
+              <button onclick="cambiarCantidad(${item.id}, -1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Disminuir cantidad de ${esc(item.nombre)}">
+                <i class="fas fa-minus"></i>
+              </button>
+              <span class="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm font-semibold">${item.cantidad}</span>
+              <button onclick="cambiarCantidad(${item.id}, 1, '${item.fecha || ''}')" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Aumentar cantidad de ${esc(item.nombre)}">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
+            <div class="text-center font-bold text-success">$${subtotal.toLocaleString()}</div>
+            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar ${esc(item.nombre)} del carrito">
+              <i class="fas fa-trash"></i>
+            </button>
           </div>
         </div>
       `;
     });
-    
+
     cartItems.innerHTML = itemsHTML;
     cartTotal.textContent = total.toLocaleString();
   }
-  
-  modal.show();
-}
 
-function closeCartModal() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('cartModal'));
-  if (modal) modal.hide();
+  openModal('cartModal');
 }
 
 function mismaLinea(item, id, fecha) {
@@ -583,59 +790,51 @@ function checkout() {
     });
     return;
   }
-  
-  closeCartModal();
-  
-  const modal = new bootstrap.Modal(document.getElementById('checkoutModal'));
+
+  closeModal('cartModal');
+
   const checkoutSummary = document.getElementById('checkoutSummary');
-  
+
   // Generar resumen de la compra
   let summaryHTML = '';
   let total = 0;
-  
+
   carrito.forEach(item => {
     const subtotal = item.precio * item.cantidad;
     total += subtotal;
-    
+
     summaryHTML += `
-      <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-        <span class="fw-medium">${item.nombre} x ${item.cantidad}${item.fecha ? `<br><small class="text-muted">${formatearFechaCO(item.fecha)}</small>` : ''}</span>
-        <span class="text-success fw-bold">$${subtotal.toLocaleString()}</span>
+      <div class="flex items-center justify-between gap-2 border-b border-gray-200 py-2">
+        <span class="font-medium">${esc(item.nombre)} x ${item.cantidad}${item.fecha ? `<br><small class="text-muted">${formatearFechaCO(item.fecha)}</small>` : ''}</span>
+        <span class="font-bold text-success">$${subtotal.toLocaleString()}</span>
       </div>
     `;
   });
-  
+
   summaryHTML += `
-    <div class="d-flex justify-content-between align-items-center py-3 border-top mt-3">
-      <span class="h5 mb-0 text-primary">Total:</span>
-      <span class="h4 mb-0 text-success fw-bold">$${total.toLocaleString()}</span>
+    <div class="mt-3 flex items-center justify-between border-t border-gray-200 pt-3">
+      <span class="text-lg font-bold text-brand">Total:</span>
+      <span class="text-xl font-bold text-success">$${total.toLocaleString()}</span>
     </div>
   `;
-  
-  checkoutSummary.innerHTML = summaryHTML;
-  modal.show();
-}
 
-function closeCheckoutModal() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('checkoutModal'));
-  if (modal) modal.hide();
+  checkoutSummary.innerHTML = summaryHTML;
+  openModal('checkoutModal');
 }
 
 function selectPayment(metodo) {
   metodoPagoSeleccionado = metodo;
-  
+
   // Remover selección previa
   document.querySelectorAll('.payment-btn').forEach(btn => {
-    btn.classList.remove('btn-primary');
-    btn.classList.add('btn-outline-primary');
+    btn.classList.remove('payment-selected');
   });
-  
+
   // Seleccionar botón actual
-  event.target.closest('.payment-btn').classList.remove('btn-outline-primary');
-  event.target.closest('.payment-btn').classList.add('btn-primary');
+  event.target.closest('.payment-btn').classList.add('payment-selected');
 }
 
-function processPayment() {
+async function processPayment() {
   if (!metodoPagoSeleccionado) {
     Swal.fire({
       icon: 'warning',
@@ -645,48 +844,60 @@ function processPayment() {
     });
     return;
   }
-  
+
   const total = carrito.reduce((total, item) => total + (item.precio * item.cantidad), 0);
-  
+
+  const items = carrito.map(item => ({
+    product_id: item.id,
+    quantity: item.cantidad,
+    reservation_date: item.fecha || null
+  }));
+
   Swal.fire({
     icon: 'info',
-    title: 'Procesando Pago',
-    text: `Redirigiendo a ${metodoPagoSeleccionado.toUpperCase()}...`,
+    title: 'Creando pedido',
+    text: 'Validando productos y reserva...',
     showConfirmButton: false,
-    timer: 2000
-  }).then(() => {
-    // Aquí es donde conectarías con PSE, Mercado Pago, etc.
+    allowOutsideClick: false,
+    didOpen: () => Swal.showLoading()
+  });
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+      },
+      body: JSON.stringify({ items, payment_method: metodoPagoSeleccionado })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No se pudo crear el pedido');
+    Swal.close();
     Swal.fire({
       icon: 'success',
-      title: '¡Pago Exitoso!',
-      text: `Tu compra por $${total.toLocaleString()} ha sido procesada`,
+      title: '¡Pedido creado!',
+      text: `Pedido #${data.order_id} por $${Number(data.total).toLocaleString()} registrado como pendiente.`,
       confirmButtonColor: '#28a745',
       confirmButtonText: 'Continuar'
     }).then(() => {
       // Limpiar carrito
       carrito = [];
+      localStorage.removeItem('mundoPetsCart');
+      metodoPagoSeleccionado = null;
       actualizarContadorCarrito();
-      closeCheckoutModal();
-      
+      closeModal('checkoutModal');
+
       // Redirigir al dashboard
       window.location.href = 'dashboard.html';
     });
-  });
-}
-
-// Cerrar modales al hacer clic fuera de ellos
-window.onclick = function(event) {
-  const productsModal = document.getElementById('productsModal');
-  const cartModal = document.getElementById('cartModal');
-  const checkoutModal = document.getElementById('checkoutModal');
-  
-  if (event.target === productsModal) {
-    productsModal.style.display = 'none';
-  }
-  if (event.target === cartModal) {
-    cartModal.style.display = 'none';
-  }
-  if (event.target === checkoutModal) {
-    checkoutModal.style.display = 'none';
+  } catch (error) {
+    Swal.close();
+    Swal.fire({
+      icon: 'error',
+      title: 'No se pudo crear el pedido',
+      text: error.message,
+      confirmButtonColor: '#b42318'
+    });
   }
 }

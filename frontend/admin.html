@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel Admin - Mundo Pets</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="dist/tailwind.css?v=3" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+  <div class="overlay">
+    <div class="mx-auto flex w-full max-w-7xl gap-4 p-4 sm:p-6">
+
+      <!-- Sidebar (desktop) -->
+      <aside class="glass-card hidden w-64 shrink-0 self-start rounded-card p-4 md:block">
+        <div class="mb-6 flex items-center gap-3">
+          <div class="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-primary text-warn">
+            <i class="fas fa-paw"></i>
+          </div>
+          <div>
+            <p class="mb-0 font-display text-lg font-bold text-brand">Mundo Pets</p>
+            <p class="text-xs uppercase tracking-widest text-muted">Panel Admin</p>
+          </div>
+        </div>
+        <nav class="flex flex-col gap-2" aria-label="Navegación del panel">
+          <button type="button" class="nav-btn inline-flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-sm font-semibold transition duration-200" data-nav="resumen" onclick="mostrarSeccion('resumen')">
+            <i class="fas fa-chart-pie w-5"></i>Resumen
+          </button>
+          <button type="button" class="nav-btn inline-flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-sm font-semibold transition duration-200" data-nav="productos" onclick="mostrarSeccion('productos')">
+            <i class="fas fa-box w-5"></i>Productos
+          </button>
+          <button type="button" class="nav-btn inline-flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-sm font-semibold transition duration-200" data-nav="categorias" onclick="mostrarSeccion('categorias')">
+            <i class="fas fa-tags w-5"></i>Categorías
+          </button>
+          <button type="button" class="nav-btn inline-flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-sm font-semibold transition duration-200" data-nav="usuarios" onclick="mostrarSeccion('usuarios')">
+            <i class="fas fa-users w-5"></i>Usuarios
+          </button>
+          <hr class="my-2 border-brand/10">
+          <button type="button" class="inline-flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-sm font-semibold text-danger transition duration-200 hover:bg-danger/10" onclick="logoutAdmin()">
+            <i class="fas fa-sign-out-alt w-5"></i>Cerrar sesión
+          </button>
+        </nav>
+      </aside>
+
+      <main class="min-w-0 flex-1">
+        <!-- Barra superior (móvil) -->
+        <div class="glass-card mb-4 flex flex-wrap items-center justify-between gap-2 rounded-card p-3 md:hidden">
+          <div class="flex items-center gap-2">
+            <div class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-primary text-warn">
+              <i class="fas fa-paw"></i>
+            </div>
+            <p class="mb-0 font-display font-bold text-brand">Mundo Pets</p>
+          </div>
+          <button type="button" class="inline-flex items-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-sm font-semibold text-danger" onclick="logoutAdmin()">
+            <i class="fas fa-sign-out-alt"></i>Salir
+          </button>
+          <div class="flex w-full gap-2">
+            <button type="button" class="nav-btn flex-1 rounded-full px-3 py-2 text-sm font-semibold transition" data-nav="resumen" onclick="mostrarSeccion('resumen')">Resumen</button>
+            <button type="button" class="nav-btn flex-1 rounded-full px-3 py-2 text-sm font-semibold transition" data-nav="productos" onclick="mostrarSeccion('productos')">Productos</button>
+            <button type="button" class="nav-btn flex-1 rounded-full px-3 py-2 text-sm font-semibold transition" data-nav="categorias" onclick="mostrarSeccion('categorias')">Categorías</button>
+            <button type="button" class="nav-btn flex-1 rounded-full px-3 py-2 text-sm font-semibold transition" data-nav="usuarios" onclick="mostrarSeccion('usuarios')">Usuarios</button>
+          </div>
+        </div>
+
+        <!-- Resumen -->
+        <section id="seccion-resumen" class="seccion">
+          <div class="glass-card rounded-card p-5 sm:p-6">
+            <div class="mb-4">
+              <h1 class="text-2xl font-bold text-brand">Resumen</h1>
+              <p class="text-muted">Visión general de tu tienda</p>
+            </div>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div class="rounded-card bg-brand-soft/40 p-6 text-center">
+                <div class="icon-wrapper mb-3 bg-white/80 p-4 shadow-sm">
+                  <i class="fas fa-users fa-2x text-brand"></i>
+                </div>
+                <div class="stat-number" id="stat-usuarios">–</div>
+                <div class="stat-label">Usuarios</div>
+              </div>
+              <div class="rounded-card bg-brand-soft/40 p-6 text-center">
+                <div class="icon-wrapper mb-3 bg-white/80 p-4 shadow-sm">
+                  <i class="fas fa-box fa-2x text-success"></i>
+                </div>
+                <div class="stat-number" id="stat-productos">–</div>
+                <div class="stat-label">Productos</div>
+              </div>
+              <div class="rounded-card bg-brand-soft/40 p-6 text-center">
+                <div class="icon-wrapper mb-3 bg-white/80 p-4 shadow-sm">
+                  <i class="fas fa-tags fa-2x text-info"></i>
+                </div>
+                <div class="stat-number" id="stat-categorias">–</div>
+                <div class="stat-label">Categorías</div>
+              </div>
+            </div>
+            <div class="mt-4 rounded-card border border-brand/10 bg-brand-soft/30 p-5">
+              <p class="mb-1 text-sm font-semibold text-muted">Acceso rápido</p>
+              <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="mostrarSeccion('productos')" class="btn-brand-outline px-4 py-2 text-sm">
+                  <i class="fas fa-plus mr-2"></i>Gestionar productos
+                </button>
+                <button type="button" onclick="mostrarSeccion('usuarios')" class="btn-brand-outline px-4 py-2 text-sm">
+                  <i class="fas fa-users mr-2"></i>Ver usuarios
+                </button>
+                <a href="dashboard.html" class="btn-brand-outline px-4 py-2 text-sm no-underline">
+                  <i class="fas fa-store mr-2"></i>Ver tienda
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Productos -->
+        <section id="seccion-productos" class="seccion hidden">
+          <div class="glass-card rounded-card p-5 sm:p-6">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 class="text-2xl font-bold text-brand">Productos</h1>
+                <p class="text-muted">Administra el catálogo de tu tienda</p>
+              </div>
+              <button type="button" onclick="abrirModalProducto()" class="btn-brand px-5 py-2.5">
+                <i class="fas fa-plus mr-2"></i>Nuevo Producto
+              </button>
+            </div>
+            <div class="overflow-hidden rounded-card">
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                  <thead class="bg-brand-soft">
+                    <tr>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">ID</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Imagen</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Nombre</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Categoría</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Precio</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Fecha</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Estado</th>
+                      <th class="px-4 py-3 text-right font-semibold text-brand-dark">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-productos" class="divide-y divide-gray-100"></tbody>
+                </table>
+              </div>
+            </div>
+            <div id="pag-productos" class="pb-2"></div>
+          </div>
+        </section>
+
+        <!-- Categorías -->
+        <section id="seccion-categorias" class="seccion hidden">
+          <div class="glass-card rounded-card p-5 sm:p-6">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 class="text-2xl font-bold text-brand">Categorías</h1>
+                <p class="text-muted">Organiza tu catálogo por categorías</p>
+              </div>
+              <button type="button" onclick="abrirModalCategoria()" class="btn-brand px-5 py-2.5">
+                <i class="fas fa-plus mr-2"></i>Nueva Categoría
+              </button>
+            </div>
+            <div class="overflow-hidden rounded-card">
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                  <thead class="bg-brand-soft">
+                    <tr>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">ID</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Nombre</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Descripción</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Icono</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Color</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Productos</th>
+                      <th class="px-4 py-3 text-right font-semibold text-brand-dark">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-categorias" class="divide-y divide-gray-100"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Usuarios -->
+        <section id="seccion-usuarios" class="seccion hidden">
+          <div class="glass-card rounded-card p-5 sm:p-6">
+            <div class="mb-4">
+              <h1 class="text-2xl font-bold text-brand">Usuarios</h1>
+              <p class="text-muted">Usuarios registrados y sus permisos de acceso</p>
+            </div>
+            <div class="overflow-hidden rounded-card">
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                  <thead class="bg-brand-soft">
+                    <tr>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">ID</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Usuario</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Email</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Rol</th>
+                      <th class="px-4 py-3 font-semibold text-brand-dark">Registro</th>
+                      <th class="px-4 py-3 text-right font-semibold text-brand-dark">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-usuarios" class="divide-y divide-gray-100"></tbody>
+                </table>
+              </div>
+            </div>
+            <div id="pag-usuarios" class="pb-2"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal de Producto -->
+  <div id="productoModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="productoModalTitle" tabindex="-1">
+    <div class="modal-backdrop absolute inset-0" onclick="closeModal('productoModal')"></div>
+    <div class="modal-panel relative flex max-h-[90vh] w-full max-w-lg flex-col">
+      <div class="modal-header-bar bg-gradient-primary flex items-center justify-between px-6 py-4">
+        <h2 class="text-lg font-bold" id="productoModalTitle">Nuevo Producto</h2>
+        <button type="button" class="modal-close text-2xl" onclick="closeModal('productoModal')" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="overflow-y-auto p-6">
+        <div class="flex flex-col gap-4">
+          <input type="hidden" id="prodId">
+          <div>
+            <label for="prodNombre" class="mb-1.5 block text-sm font-semibold text-muted">Nombre</label>
+            <input id="prodNombre" class="input-field w-full px-4 py-3" placeholder="Nombre del producto">
+          </div>
+          <div>
+            <label for="prodImagenFile" class="mb-1.5 block text-sm font-semibold text-muted">Imagen del producto</label>
+            <div class="mb-2 flex items-center gap-3">
+              <div id="prodImagenEmpty" class="flex h-16 w-16 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                <i class="fas fa-image"></i>
+              </div>
+              <img id="prodImagenPreview" class="hidden h-16 w-16 rounded-xl object-cover" alt="Vista previa">
+            </div>
+            <input type="file" id="prodImagenFile" accept="image/*" onchange="onImagenSeleccionada(this)"
+                   class="block w-full text-sm text-muted file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-brand-soft file:px-4 file:py-2 file:font-semibold file:text-brand hover:file:bg-brand-soft/60">
+            <p class="mt-1.5 text-sm text-muted">
+              <i class="fas fa-info-circle mr-1"></i>Se optimiza a WebP (máx. 800 px) en el servidor.
+            </p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label for="prodCategoria" class="mb-1.5 block text-sm font-semibold text-muted">Categoría</label>
+              <select id="prodCategoria" class="input-field w-full px-4 py-3"></select>
+            </div>
+            <div>
+              <label for="prodPrecio" class="mb-1.5 block text-sm font-semibold text-muted">Precio ($)</label>
+              <input id="prodPrecio" type="number" min="0" step="500" class="input-field w-full px-4 py-3" placeholder="0">
+            </div>
+          </div>
+          <div>
+            <label for="prodDescripcion" class="mb-1.5 block text-sm font-semibold text-muted">Descripción</label>
+            <textarea id="prodDescripcion" rows="2" class="input-field w-full px-4 py-3" placeholder="Descripción del producto"></textarea>
+          </div>
+          <div class="flex flex-wrap gap-6">
+            <label class="flex items-center gap-2 text-sm font-semibold text-muted">
+              <input type="checkbox" id="prodFecha" class="h-5 w-5 accent-brand"> Requiere reservar fecha
+            </label>
+            <label class="flex items-center gap-2 text-sm font-semibold text-muted">
+              <input type="checkbox" id="prodActivo" class="h-5 w-5 accent-brand"> Activo
+            </label>
+          </div>
+          <button type="button" onclick="guardarProducto()" class="btn-brand w-full py-3 text-base font-bold">
+            <i class="fas fa-save mr-2"></i>Guardar Producto
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Usuario -->
+  <div id="usuarioModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="usuarioModalTitle" tabindex="-1">
+    <div class="modal-backdrop absolute inset-0" onclick="closeModal('usuarioModal')"></div>
+    <div class="modal-panel relative flex max-h-[90vh] w-full max-w-md flex-col">
+      <div class="modal-header-bar bg-gradient-primary flex items-center justify-between px-6 py-4">
+        <h2 class="text-lg font-bold" id="usuarioModalTitle">Editar Usuario</h2>
+        <button type="button" class="modal-close text-2xl" onclick="closeModal('usuarioModal')" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="overflow-y-auto p-6">
+        <div class="flex flex-col gap-4">
+          <input type="hidden" id="usrId">
+          <div>
+            <label for="usrNombre" class="mb-1.5 block text-sm font-semibold text-muted">Usuario</label>
+            <input id="usrNombre" class="input-field w-full bg-gray-50 px-4 py-3" readonly>
+          </div>
+          <div>
+            <label for="usrEmail" class="mb-1.5 block text-sm font-semibold text-muted">Correo</label>
+            <input id="usrEmail" class="input-field w-full bg-gray-50 px-4 py-3" readonly>
+          </div>
+          <div>
+            <label for="usrRol" class="mb-1.5 block text-sm font-semibold text-muted">Permisos (rol)</label>
+            <select id="usrRol" class="input-field w-full px-4 py-3">
+              <option value="user">Usuario (tienda)</option>
+              <option value="admin">Administrador (panel completo)</option>
+            </select>
+            <p class="mt-1.5 text-sm text-muted">
+              <i class="fas fa-info-circle mr-1"></i>El usuario debe iniciar sesión nuevamente para aplicar el cambio.
+            </p>
+          </div>
+          <button type="button" onclick="guardarRolUsuario()" class="btn-brand w-full py-3 text-base font-bold">
+            <i class="fas fa-user-shield mr-2"></i>Guardar Permisos
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Categoría -->
+  <div id="categoriaModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="categoriaModalTitle" tabindex="-1">
+    <div class="modal-backdrop absolute inset-0" onclick="closeModal('categoriaModal')"></div>
+    <div class="modal-panel relative flex max-h-[90vh] w-full max-w-lg flex-col">
+      <div class="modal-header-bar bg-gradient-primary flex items-center justify-between px-6 py-4">
+        <h2 class="text-lg font-bold" id="categoriaModalTitle">Nueva Categoría</h2>
+        <button type="button" class="modal-close text-2xl" onclick="closeModal('categoriaModal')" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="overflow-y-auto p-6">
+        <div class="flex flex-col gap-4">
+          <input type="hidden" id="catId">
+          <div>
+            <label for="catNombre" class="mb-1.5 block text-sm font-semibold text-muted">Nombre</label>
+            <input id="catNombre" class="input-field w-full px-4 py-3" placeholder="Nombre de la categoría">
+          </div>
+          <div>
+            <label for="catDescripcion" class="mb-1.5 block text-sm font-semibold text-muted">Descripción</label>
+            <textarea id="catDescripcion" rows="2" class="input-field w-full px-4 py-3" placeholder="Describe la categoría (opcional)"></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label for="catIcono" class="mb-1.5 block text-sm font-semibold text-muted">Icono</label>
+              <select id="catIcono" class="input-field w-full px-4 py-3">
+                <option value="fa-tag">Etiqueta (tag)</option>
+                <option value="fa-bone">Hueso</option>
+                <option value="fa-pills">Pastillas</option>
+                <option value="fa-cut">Tijeras</option>
+                <option value="fa-home">Casa</option>
+                <option value="fa-paw">Huella</option>
+                <option value="fa-heart">Corazón</option>
+                <option value="fa-star">Estrella</option>
+                <option value="fa-gift">Regalo</option>
+                <option value="fa-shopping-bag">Bolsa</option>
+              </select>
+            </div>
+            <div>
+              <label for="catColor" class="mb-1.5 block text-sm font-semibold text-muted">Color</label>
+              <select id="catColor" class="input-field w-full px-4 py-3">
+                <option value="brand">Teal (marca)</option>
+                <option value="warn">Dorado</option>
+                <option value="danger">Rojo</option>
+                <option value="info">Celeste</option>
+                <option value="success">Verde</option>
+                <option value="muted">Gris</option>
+              </select>
+            </div>
+          </div>
+          <button type="button" onclick="guardarCategoria()" class="btn-brand w-full py-3 text-base font-bold">
+            <i class="fas fa-save mr-2"></i>Guardar Categoría
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="admin.js?v=4"></script>
+</body>
+</html>

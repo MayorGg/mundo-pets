@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model categories {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @unique(map: "nombre") @db.VarChar(50)
+  descripcion String?  @db.Text
+  icono       String   @default("fa-tag") @db.VarChar(50)
+  color       String   @default("brand") @db.VarChar(20)
+  created_at  DateTime @default(now()) @db.Timestamp(0)
+  products    products[]
+}
+
+model order_items {
+  id         Int      @id @default(autoincrement())
+  order_id   Int
+  product_id Int
+  quantity   Int
+  price      Decimal  @db.Decimal(10, 2)
+  orders     orders   @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_order_items_order")
+  products   products @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_order_items_product")
+
+  @@index([product_id], map: "fk_order_items_product")
+  @@index([order_id], map: "idx_order_items_order_id")
+}
+
+model orders {
+  id             Int                 @id @default(autoincrement())
+  user_id        Int
+  total          Decimal             @db.Decimal(10, 2)
+  payment_method String              @db.VarChar(50)
+  order_status   orders_order_status @default(pending)
+  created_at     DateTime            @default(now()) @db.Timestamp(0)
+  updated_at     DateTime            @default(now()) @db.Timestamp(0)
+  order_items    order_items[]
+  users          users               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_orders_user")
+  reservations   reservations[]
+
+  @@index([order_status], map: "idx_orders_status")
+  @@index([user_id], map: "idx_orders_user_id")
+}
+
+model products {
+  id             Int            @id @default(autoincrement())
+  nombre         String         @db.VarChar(100)
+  categoria      String         @db.VarChar(50)
+  category_id    Int?
+  precio         Decimal        @db.Decimal(10, 2)
+  descripcion    String?        @db.Text
+  imagen         String?        @db.VarChar(255)
+  requiere_fecha Boolean        @default(false)
+  activo         Boolean        @default(true)
+  categories     categories?    @relation(fields: [category_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_products_category")
+  order_items    order_items[]
+  reservations   reservations[]
+
+  @@index([activo], map: "idx_products_activo")
+  @@index([categoria], map: "idx_products_categoria")
+  @@index([category_id], map: "idx_products_category_id")
+}
+
+model reservations {
+  id                 Int                             @id @default(autoincrement())
+  order_id           Int
+  user_id            Int
+  product_id         Int
+  reservation_date   DateTime                        @db.Date
+  quantity           Int
+  price              Decimal                         @db.Decimal(10, 2)
+  reservation_status reservations_reservation_status @default(pending)
+  created_at         DateTime                        @default(now()) @db.Timestamp(0)
+  updated_at         DateTime                        @default(now()) @db.Timestamp(0)
+  orders             orders                          @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reservations_order")
+  products           products                        @relation(fields: [product_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_reservations_product")
+  users              users                           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_reservations_user")
+
+  @@index([order_id], map: "fk_reservations_order")
+  @@index([product_id], map: "fk_reservations_product")
+  @@index([reservation_date], map: "idx_reservations_date")
+  @@index([reservation_status], map: "idx_reservations_status")
+  @@index([user_id], map: "idx_reservations_user_id")
+}
+
+model users {
+  id           Int            @id @default(autoincrement())
+  username     String         @unique(map: "username") @db.VarChar(50)
+  email        String         @unique(map: "email") @db.VarChar(100)
+  password     String         @db.VarChar(255)
+  role         users_role     @default(user)
+  created_at   DateTime       @default(now()) @db.Timestamp(0)
+  orders       orders[]
+  reservations reservations[]
+}
+
+enum orders_order_status {
+  pending
+  paid
+  processing
+  cancelled
+}
+
+enum users_role {
+  user
+  admin
+}
+
+enum reservations_reservation_status {
+  pending
+  confirmed
+  cancelled
+}

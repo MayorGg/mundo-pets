@@ -3,3 +3,13 @@ backend/node_modules/
 .DS_Store
 Thumbs.db
 .env
+.env.*
+!.env.example
+backups/
+logs/
+deploy/letsencrypt/
+# Artefactos de herramientas de IA (no son código del proyecto)
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
