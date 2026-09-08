@@ -39,6 +39,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - name: Instalar dependencias
         run: npm --prefix backend ci
+      - name: Generar Prisma Client
+        run: npx --prefix backend prisma generate --schema backend/prisma/schema.prisma
       - name: Typecheck (tsc --noEmit)
         run: npm --prefix backend run typecheck
       - name: Crear esquema y datos base (seed)

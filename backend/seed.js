@@ -58,6 +58,15 @@ async function main() {
   `);
   await conn.query('USE mundo_pets');
 
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) NOT NULL UNIQUE,
+      email VARCHAR(100) NOT NULL UNIQUE,
+      password VARCHAR(255) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   // Migración: role y created_at en users
   if (!(await columnExists(conn, 'users', 'role'))) {
     await conn.query(`ALTER TABLE users ADD COLUMN role ENUM('user','admin') NOT NULL DEFAULT 'user'`);
@@ -67,6 +76,19 @@ async function main() {
     await conn.query(`ALTER TABLE users ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP`);
     console.log('Columna users.created_at creada.');
   }
+
+  // Tabla categories + seed
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      nombre VARCHAR(50) NOT NULL UNIQUE,
+      descripcion TEXT NULL,
+      icono VARCHAR(50) NOT NULL DEFAULT 'fa-tag',
+      color VARCHAR(20) NOT NULL DEFAULT 'brand',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  console.log('Tabla categories lista.');
 
   // Tabla products
   await conn.query(`
@@ -97,19 +119,6 @@ async function main() {
     await conn.query('CREATE INDEX idx_products_categoria ON products (categoria)');
     console.log('Índice idx_products_categoria creado.');
   }
-
-  // Tabla categories + seed
-  await conn.query(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      nombre VARCHAR(50) NOT NULL UNIQUE,
-      descripcion TEXT NULL,
-      icono VARCHAR(50) NOT NULL DEFAULT 'fa-tag',
-      color VARCHAR(20) NOT NULL DEFAULT 'brand',
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-  console.log('Tabla categories lista.');
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS orders (
