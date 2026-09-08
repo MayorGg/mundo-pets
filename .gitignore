@@ -8,3 +8,8 @@ Thumbs.db
 backups/
 logs/
 deploy/letsencrypt/
+# Artefactos de herramientas de IA (no son código del proyecto)
+.agents/
+.claude/
+.windsurf/
+skills-lock.json

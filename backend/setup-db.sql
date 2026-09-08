@@ -18,13 +18,16 @@ CREATE TABLE IF NOT EXISTS products (
   id INT AUTO_INCREMENT PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL,
   categoria VARCHAR(50) NOT NULL,
+  category_id INT NULL,
   precio DECIMAL(10,2) NOT NULL,
   descripcion TEXT NULL,
   imagen VARCHAR(255) NULL,
   requiere_fecha TINYINT(1) NOT NULL DEFAULT 0,
   activo TINYINT(1) NOT NULL DEFAULT 1,
   INDEX idx_products_activo (activo),
-  INDEX idx_products_categoria (categoria)
+  INDEX idx_products_categoria (categoria),
+  INDEX idx_products_category_id (category_id),
+  CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS categories (

@@ -74,11 +74,16 @@ async function main() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       nombre VARCHAR(100) NOT NULL,
       categoria VARCHAR(50) NOT NULL,
+      category_id INT NULL,
       precio DECIMAL(10,2) NOT NULL,
       descripcion TEXT NULL,
       imagen VARCHAR(255) NULL,
       requiere_fecha TINYINT(1) NOT NULL DEFAULT 0,
-      activo TINYINT(1) NOT NULL DEFAULT 1
+      activo TINYINT(1) NOT NULL DEFAULT 1,
+      INDEX idx_products_activo (activo),
+      INDEX idx_products_categoria (categoria),
+      INDEX idx_products_category_id (category_id),
+      CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
   console.log('Tabla products lista.');
@@ -171,18 +176,22 @@ async function main() {
   }
   console.log(`Seed de ${CATEGORIAS.length} categorías aplicado.`);
 
-  // Seed de productos (idempotente)
+  // Seed de productos (idempotente), con category_id vía FK real
+  const [catRows] = await conn.query('SELECT id, nombre FROM categories');
+  const catIdByNombre = new Map(catRows.map(c => [c.nombre, c.id]));
   for (const p of PRODUCTOS) {
+    const categoryId = catIdByNombre.get(p.categoria) || null;
     await conn.query(
-      `INSERT INTO products (id, nombre, categoria, precio, descripcion, requiere_fecha)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO products (id, nombre, categoria, category_id, precio, descripcion, requiere_fecha)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          nombre = VALUES(nombre),
          categoria = VALUES(categoria),
+         category_id = VALUES(category_id),
          precio = VALUES(precio),
          descripcion = VALUES(descripcion),
          requiere_fecha = VALUES(requiere_fecha)`,
-      [p.id, p.nombre, p.categoria, p.precio, p.descripcion, p.requiere_fecha]
+      [p.id, p.nombre, p.categoria, categoryId, p.precio, p.descripcion, p.requiere_fecha]
     );
   }
   console.log(`Seed de ${PRODUCTOS.length} productos aplicado.`);

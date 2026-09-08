@@ -12,11 +12,16 @@ const compression = require('compression');
 const mysql = require('mysql2/promise');
 const multer = require('multer');
 const sharp = require('sharp');
+const { loginSchema, registerSchema, refreshSchema, productSchema, categorySchema, orderSchema } = require('./lib/schemas');
+const { validate } = require('./lib/validate');
 
 // Cargar variables de entorno según ambiente (dev -> .env, prod -> .env.production)
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const ENV_FILE = NODE_ENV === 'production' ? '.env.production' : '.env';
 require('dotenv').config({ path: path.join(__dirname, ENV_FILE) });
+
+// Requerir el cliente Prisma DESPUÉS de cargar el entorno (lee DB_* del adapter)
+const prisma = require('./lib/prisma');
 
 const app = express();
 
@@ -260,9 +265,8 @@ function requireAdmin(req, res, next) {
 }
 
 // Renovar el access token con un refresh token válido
-app.post('/api/auth/refresh', (req, res) => {
+app.post('/api/auth/refresh', validate(refreshSchema), (req, res) => {
   const { refreshToken } = req.body;
-  if (!refreshToken) return res.status(400).json({ error: 'Falta el refresh token' });
   try {
     const decoded = jwt.verify(refreshToken, SECRET);
     if (decoded.tokenType !== 'refresh') {
@@ -284,11 +288,8 @@ function parseReservationDate(value) {
   return date;
 }
 
-app.post('/api/orders', requireAuth, async (req, res) => {
-  const { items, payment_method: paymentMethod } = req.body || {};
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'El pedido debe contener al menos un producto' });
-  }
+app.post('/api/orders', requireAuth, validate(orderSchema), async (req, res) => {
+  const { items, payment_method: paymentMethod } = req.body;
   if (!PAYMENT_METHODS.has(paymentMethod)) {
     return res.status(400).json({ error: 'Método de pago no válido' });
   }
@@ -301,9 +302,6 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     quantity: Number(item && item.quantity),
     date: item && item.date ? item.date : (item && item.reservation_date ? item.reservation_date : null)
   }));
-  if (normalizedItems.some(item => !Number.isInteger(item.productId) || item.productId < 1 || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 100)) {
-    return res.status(400).json({ error: 'Cada línea debe tener un producto y una cantidad válida' });
-  }
 
   const productIds = [...new Set(normalizedItems.map(item => item.productId))];
   let conn;
@@ -411,15 +409,12 @@ function productoParams(req) {
 // Categorías públicas (para el catálogo y formularios) con caché corta
 app.get('/api/categories', async (req, res) => {
   try {
-    const data = await getCached('categories', async () => {
-      const conn = await pool.getConnection();
-      try {
-        const [rows] = await conn.query('SELECT id, nombre, descripcion, icono, color FROM categories ORDER BY nombre');
-        return rows;
-      } finally {
-        conn.release();
-      }
-    });
+    const data = await getCached('categories', async () =>
+      prisma.categories.findMany({
+        orderBy: { nombre: 'asc' },
+        select: { id: true, nombre: true, descripcion: true, icono: true, color: true }
+      })
+    );
     res.json(data);
   } catch (err) {
     console.error('Error listando categorías:', err.message);
@@ -432,23 +427,24 @@ app.get('/api/products', async (req, res) => {
   const { page, limit, offset } = paginar(req.query, 200);
   try {
     const data = await getCached(`products:${page}:${limit}`, async () => {
-      const conn = await pool.getConnection();
-      try {
-        const [[{ total }]] = await conn.query(
-          'SELECT COUNT(*) AS total FROM products WHERE activo = 1'
-        );
-        const [rows] = await conn.query(
-          'SELECT id, nombre, categoria, precio, descripcion, imagen, requiere_fecha FROM products WHERE activo = 1 ORDER BY categoria, id LIMIT ? OFFSET ?',
-          [limit, offset]
-        );
-        return respuestaPaginada(rows.map(r => ({
-          ...r,
-          precio: Number(r.precio),
-          requiere_fecha: !!r.requiere_fecha
-        })), total, page, limit);
-      } finally {
-        conn.release();
-      }
+      const [total, rows] = await Promise.all([
+        prisma.products.count({ where: { activo: true } }),
+        prisma.products.findMany({
+          where: { activo: true },
+          orderBy: [{ categoria: 'asc' }, { id: 'asc' }],
+          skip: offset,
+          take: limit,
+          select: {
+            id: true, nombre: true, categoria: true, precio: true,
+            descripcion: true, imagen: true, requiere_fecha: true
+          }
+        })
+      ]);
+      return respuestaPaginada(rows.map(r => ({
+        ...r,
+        precio: Number(r.precio),
+        requiere_fecha: !!r.requiere_fecha
+      })), total, page, limit);
     });
     res.json(data);
   } catch (err) {
@@ -495,7 +491,7 @@ app.get('/api/admin/categories', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/categories', requireAdmin, async (req, res) => {
+app.post('/api/admin/categories', requireAdmin, validate(categorySchema), async (req, res) => {
   const nombre = String(req.body.nombre || '').trim();
   const descripcion = String(req.body.descripcion || '').trim();
   const icono = String(req.body.icono || 'fa-tag').trim() || 'fa-tag';
@@ -507,7 +503,7 @@ app.post('/api/admin/categories', requireAdmin, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [exists] = await conn.query('SELECT id FROM categories WHERE nombre = ?', [nombre]);
-      if (exists.length) return res.status(400).json({ error: 'Ya existe una categoría con ese nombre' });
+      if (exists.length) return res.status(409).json({ error: 'Ya existe una categoría con ese nombre' });
 const [result] = await conn.query(
         'INSERT INTO categories (nombre, descripcion, icono, color) VALUES (?, ?, ?, ?)',
         [nombre, descripcion || null, icono, color]
@@ -523,7 +519,7 @@ const [result] = await conn.query(
   }
 });
 
-app.put('/api/admin/categories/:id', requireAdmin, async (req, res) => {
+app.put('/api/admin/categories/:id', requireAdmin, validate(categorySchema), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.json({ error: 'ID inválido' });
   const nombre = String(req.body.nombre || '').trim();
@@ -537,10 +533,10 @@ app.put('/api/admin/categories/:id', requireAdmin, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [oldRows] = await conn.query('SELECT nombre FROM categories WHERE id = ?', [id]);
-      if (!oldRows.length) return res.json({ error: 'Categoría no encontrada' });
+      if (!oldRows.length) return res.status(404).json({ error: 'Categoría no encontrada' });
       const nombreAnterior = oldRows[0].nombre;
       const [dup] = await conn.query('SELECT id FROM categories WHERE nombre = ? AND id != ?', [nombre, id]);
-      if (dup.length) return res.status(400).json({ error: 'Ya existe otra categoría con ese nombre' });
+      if (dup.length) return res.status(409).json({ error: 'Ya existe otra categoría con ese nombre' });
       await conn.query('UPDATE categories SET nombre = ?, descripcion = ?, icono = ?, color = ? WHERE id = ?', [nombre, descripcion || null, icono, color, id]);
 if (nombre !== nombreAnterior) {
         await conn.query('UPDATE products SET categoria = ? WHERE categoria = ?', [nombre, nombreAnterior]);
@@ -563,9 +559,9 @@ app.delete('/api/admin/categories/:id', requireAdmin, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [rows] = await conn.query('SELECT nombre FROM categories WHERE id = ?', [id]);
-      if (!rows.length) return res.json({ error: 'Categoría no encontrada' });
+      if (!rows.length) return res.status(404).json({ error: 'Categoría no encontrada' });
       const [prods] = await conn.query('SELECT COUNT(*) AS c FROM products WHERE categoria = ?', [rows[0].nombre]);
-      if (prods[0].c > 0) return res.json({ error: `No se puede eliminar: tiene ${prods[0].c} producto(s) asociado(s). Cambia o elimina esos productos primero.` });
+      if (prods[0].c > 0) return res.status(409).json({ error: `No se puede eliminar: tiene ${prods[0].c} producto(s) asociado(s). Cambia o elimina esos productos primero.` });
 await conn.query('DELETE FROM categories WHERE id = ?', [id]);
       invalidarCatalogo();
       res.json({ message: 'Categoría eliminada' });
@@ -605,9 +601,9 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [rows] = await conn.query('SELECT role FROM users WHERE id = ?', [id]);
-      if (rows.length === 0) return res.json({ error: 'Usuario no encontrado' });
-      if (rows[0].role === 'admin') return res.json({ error: 'No se puede eliminar una cuenta admin' });
-      if (req.user.id && id === Number(req.user.id)) return res.json({ error: 'No puedes eliminar tu propia cuenta' });
+      if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+      if (rows[0].role === 'admin') return res.status(403).json({ error: 'No se puede eliminar una cuenta admin' });
+      if (req.user.id && id === Number(req.user.id)) return res.status(403).json({ error: 'No puedes eliminar tu propia cuenta' });
       await conn.query('DELETE FROM users WHERE id = ?', [id]);
       res.json({ message: 'Usuario eliminado' });
     } finally {
@@ -630,13 +626,13 @@ app.put('/api/admin/users/:id/role', requireAdmin, async (req, res) => {
     const conn = await pool.getConnection();
     try {
       const [rows] = await conn.query('SELECT role FROM users WHERE id = ?', [id]);
-      if (rows.length === 0) return res.json({ error: 'Usuario no encontrado' });
+      if (rows.length === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
       if (req.user.id && id === Number(req.user.id)) {
-        return res.json({ error: 'No puedes cambiar tu propio rol' });
+        return res.status(403).json({ error: 'No puedes cambiar tu propio rol' });
       }
       if (rows[0].role === 'admin' && role === 'user') {
         const [[{ total: admins }]] = await conn.query("SELECT COUNT(*) AS total FROM users WHERE role = 'admin'");
-        if (admins <= 1) return res.json({ error: 'No se puede quitar el único administrador' });
+        if (admins <= 1) return res.status(409).json({ error: 'No se puede quitar el único administrador' });
       }
       await conn.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
       res.json({ message: 'Rol actualizado', role });
@@ -690,7 +686,7 @@ app.post('/api/admin/products/:id/image', requireAdmin, uploadImagen.single('ima
     } finally {
       conn.release();
     }
-    if (!existe) return res.json({ error: 'Producto no encontrado' });
+    if (!existe) return res.status(404).json({ error: 'Producto no encontrado' });
 
     const filename = `${id}.webp`;
     await sharp(req.file.buffer)
@@ -713,7 +709,7 @@ app.post('/api/admin/products/:id/image', requireAdmin, uploadImagen.single('ima
   }
 });
 
-app.post('/api/admin/products', requireAdmin, async (req, res) => {
+app.post('/api/admin/products', requireAdmin, validate(productSchema), async (req, res) => {
   const p = productoParams(req);
   if (!p.nombre || !p.categoria || !Number.isFinite(p.precio) || p.precio < 0) {
     return res.status(400).json({ error: 'Nombre, categoría y precio válido son requeridos' });
@@ -724,8 +720,8 @@ app.post('/api/admin/products', requireAdmin, async (req, res) => {
       const [catExists] = await conn.query('SELECT id FROM categories WHERE nombre = ?', [p.categoria]);
       if (!catExists.length) return res.status(400).json({ error: 'La categoría no existe' });
 const [result] = await conn.query(
-        'INSERT INTO products (nombre, categoria, precio, descripcion, imagen, requiere_fecha, activo) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [p.nombre, p.categoria, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo]
+        'INSERT INTO products (nombre, categoria, category_id, precio, descripcion, imagen, requiere_fecha, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [p.nombre, p.categoria, catExists[0].id, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo]
       );
       invalidarCatalogo();
       res.json({ message: 'Producto creado', id: result.insertId });
@@ -738,7 +734,7 @@ const [result] = await conn.query(
   }
 });
 
-app.put('/api/admin/products/:id', requireAdmin, async (req, res) => {
+app.put('/api/admin/products/:id', requireAdmin, validate(productSchema), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.json({ error: 'ID inválido' });
   const p = productoParams(req);
@@ -751,10 +747,10 @@ app.put('/api/admin/products/:id', requireAdmin, async (req, res) => {
       const [catExists] = await conn.query('SELECT id FROM categories WHERE nombre = ?', [p.categoria]);
       if (!catExists.length) return res.status(400).json({ error: 'La categoría no existe' });
       const [result] = await conn.query(
-        'UPDATE products SET nombre = ?, categoria = ?, precio = ?, descripcion = ?, imagen = ?, requiere_fecha = ?, activo = ? WHERE id = ?',
-        [p.nombre, p.categoria, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo, id]
+        'UPDATE products SET nombre = ?, categoria = ?, category_id = ?, precio = ?, descripcion = ?, imagen = ?, requiere_fecha = ?, activo = ? WHERE id = ?',
+        [p.nombre, p.categoria, catExists[0].id, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo, id]
       );
-if (result.affectedRows === 0) return res.json({ error: 'Producto no encontrado' });
+if (result.affectedRows === 0) return res.status(404).json({ error: 'Producto no encontrado' });
       invalidarCatalogo();
       res.json({ message: 'Producto actualizado' });
     } finally {
@@ -773,7 +769,7 @@ app.delete('/api/admin/products/:id', requireAdmin, async (req, res) => {
     const conn = await pool.getConnection();
     try {
 const [result] = await conn.query('DELETE FROM products WHERE id = ?', [id]);
-      if (result.affectedRows === 0) return res.json({ error: 'Producto no encontrado' });
+      if (result.affectedRows === 0) return res.status(404).json({ error: 'Producto no encontrado' });
       invalidarCatalogo();
       res.json({ message: 'Producto eliminado' });
     } finally {
@@ -785,19 +781,8 @@ const [result] = await conn.query('DELETE FROM products WHERE id = ?', [id]);
   }
 });
 
-app.post('/api/register', registerLimiter, async (req, res) => {
+app.post('/api/register', registerLimiter, validate(registerSchema), async (req, res) => {
   const { username, email, password } = req.body;
-  
-  // Validaciones
-  if (!username || !email || !password) {
-    return res.json({ error: 'Todos los campos son requeridos' });
-  }
-  
-  // Validar formato de email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.json({ error: 'Formato de email inválido' });
-  }
 
   try {
     const conn = await pool.getConnection();
@@ -811,7 +796,7 @@ app.post('/api/register', registerLimiter, async (req, res) => {
       if (rows.length > 0) {
         const existing = rows[0];
         // No sabemos si choca por username o por email, pero mantenemos mensajes similares
-        return res.json({ error: 'El nombre de usuario o email ya está registrado' });
+        return res.status(409).json({ error: 'El nombre de usuario o email ya está registrado' });
       }
 
       const hash = bcrypt.hashSync(password, 10);
@@ -829,17 +814,13 @@ app.post('/api/register', registerLimiter, async (req, res) => {
   } catch (err) {
     console.error('MySQL no disponible, usando users.json:', err.message);
     const result = registerWithJson(username, email, password);
-    if (result.error) return res.json(result);
+    if (result.error) return res.status(409).json(result);
     res.json(result);
   }
 });
 
-app.post('/api/login', loginLimiter, async (req, res) => {
+app.post('/api/login', loginLimiter, validate(loginSchema), async (req, res) => {
   const { identifier, password } = req.body;
-  
-  if (!identifier || !password) {
-    return res.json({ error: 'Usuario/Email y contraseña son requeridos' });
-  }
 
   try {
     const conn = await pool.getConnection();
@@ -851,7 +832,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
       );
 
       if (rows.length === 0) {
-        return res.json({ error: 'Credenciales inválidas' });
+        return res.status(401).json({ error: 'Credenciales inválidas' });
       }
 
       const user = rows[0];
@@ -860,7 +841,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
       const ok = esHashBcrypt(user.password)
         ? bcrypt.compareSync(password, user.password)
         : user.password === password;
-      if (!ok) return res.json({ error: 'Credenciales inválidas' });
+      if (!ok) return res.status(401).json({ error: 'Credenciales inválidas' });
 
       // Migrar a hash si venía en texto plano
       if (!esHashBcrypt(user.password)) {
@@ -874,7 +855,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
   } catch (err) {
     console.error('MySQL no disponible, usando users.json:', err.message);
     const result = loginWithJson(identifier, password);
-    if (result.error) return res.json(result);
+    if (result.error) return res.status(401).json(result);
     res.json(result);
   }
 });

@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 2 de septiembre de 2026 — Fase 0 de seguridad (bcrypt, JWT + refresh, CORS, rate limiting), Fase Infraestructura (helmet, compression, cache-control, PM2, backups, Nginx/Let's Encrypt), Fase Procesamiento (imágenes con sharp, paginación, caché, índices) y Fase Visualización y diseño (feedback de carga, estados vacíos, movimiento, responsive y accesibilidad).
+> **Última actualización:** 7 de septiembre de 2026 — Fase 0 de seguridad, Fase Infraestructura, Fase Procesamiento y Fase Visualización y diseño (completadas) + Fase 1 Calidad y Datos (TypeScript + Zod + Prisma: validación por endpoint, códigos HTTP normalizados, FK `products.category_id`, lecturas públicas con Prisma).
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -148,7 +148,9 @@ El servidor expone también `/img` como alias para la carpeta raíz `img/`.
 - `compression` `^1.8.1` para compresión gzip de respuestas.
 - `cors` `^2.8.5` para permitir peticiones cross-origin de orígenes restringidos.
 - `dotenv` `^17.4.2` para cargar configuración desde `.env` / `.env.production` según `NODE_ENV`.
-- CommonJS (`require` y `module` implícito), no TypeScript.
+- `zod` `^4.5.4` para validación de entrada por endpoint (esquemas en `backend/lib/schemas.js` + middleware `validate`).
+- `@prisma/client` `^7.10.0` + `@prisma/adapter-mariadb` (Prisma 7, driver adapter) para el ORM; las lecturas públicas del catálogo ya usan Prisma.
+- CommonJS (`require` y `module` implícito), no TypeScript. **Fase 1 en curso:** `typescript` + `@types/*` como dev y `tsc --noEmit` (`npm run typecheck`) para tipado incremental.
 
 Otros componentes de infraestructura (no son dependencias npm):
 
@@ -401,7 +403,8 @@ La base se llama `mundo_pets`, usa `utf8mb4` y está declarada en [backend/setup
 |---|---|---|
 | `id` | `INT AUTO_INCREMENT` | Identificador primario |
 | `nombre` | `VARCHAR(100)` | Nombre comercial |
-| `categoria` | `VARCHAR(50)` | Nombre de categoría |
+| `categoria` | `VARCHAR(50)` | Nombre de categoría (columna legado durante la transición) |
+| `category_id` | `INT NULL` | Clave foránea real a `categories.id` (FK `fk_products_category`, `ON DELETE SET NULL`) |
 | `precio` | `DECIMAL(10,2)` | Precio |
 | `descripcion` | `TEXT NULL` | Descripción |
 | `imagen` | `VARCHAR(255) NULL` | Ruta servida por Express: `/img/products/<id>.webp` (generada y optimizada con sharp); `NULL` si no hay imagen |
@@ -503,7 +506,7 @@ Estos hallazgos describen el estado actual. Los puntos 1, 2, 3, 5 y 6 se resolvi
 9. **Reserva no persistente:** seleccionar una fecha no bloquea disponibilidad ni crea una reserva.
 10. **Pago simulado:** no se valida, cobra ni confirma ninguna transacción real.
 11. **Historial comercial incompleto:** ya existen pedidos, líneas, reservas e historial básico, pero faltan factura, trazabilidad completa y actualización de estados por proveedor de pago.
-12. **Relación por texto:** cambiar manualmente nombres de categorías puede dejar datos inconsistentes si se hace fuera del endpoint previsto.
+12. ~~**Relación por texto:** cambiar manualmente nombres de categorías puede dejar datos inconsistentes~~ **En transición:** se agregó la clave foránea real `products.category_id → categories.id` (SET NULL) y se respalda en escrituras; la columna `categoria` (texto) se conserva como legado durante la migración.
 13. **Códigos HTTP irregulares:** algunos errores de validación o recursos inexistentes se devuelven con HTTP 200 y un campo `error`.
 14. **Año del calendario fijo:** la lógica de disponibilidad deja de ser adecuada al cambiar el año.
 15. **Contenido HTML dinámico:** parte del catálogo se interpola en `innerHTML`; el panel admin sí tiene un helper `esc`, pero la superficie debe revisarse de forma integral.
@@ -567,8 +570,8 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 
 ### Prioridad media
 
-1. Sustituir la relación textual de productos por una clave foránea a categorías.
-2. Unificar códigos HTTP y formato de errores.
+1. ~~Sustituir la relación textual de productos por una clave foránea a categorías~~ **En transición** (Fase 1): FK `products.category_id` agregada y respaldada; `categoria` se conserva como legado.
+2. ~~Unificar códigos HTTP y formato de errores~~ **Hecho** (Fase 1): validación con Zod + códigos `400/401/403/404/409` y cuerpo `{ error, details? }`.
 3. ~~Añadir rate limiting~~ **Hecho** en login/registro; pendiente auditoría administrativa y validación de entrada más estricta.
 4. Externalizar el año/calendario de servicios. La URL de API ya usa el origen actual y conserva fallback a `http://localhost:5000` cuando se abre con `file:`.
 5. Añadir pruebas automatizadas para autenticación, autorización, CRUD y reglas de fechas.
@@ -709,3 +712,41 @@ Objetivo: mejorar la percepción de respuesta, la coherencia del movimiento, la 
 
 - No se automatizó un flujo autenticado de dashboard o admin porque requiere credenciales y datos de API disponibles en el entorno de ejecución.
 - El fallback visual de imágenes y los estados de error de API ya existentes no se rediseñaron en esta fase; el trabajo se concentró en carga, vacío, movimiento, responsive y foco.
+
+## 20. Calidad y Datos (Fase 1 — TypeScript + Prisma + Zod)
+
+Objetivo: tipar el backend, reemplazar gradualmente las queries SQL manuales por un ORM con la relación real de categorías, y validar la entrada de forma centralizada.
+
+### Validación con Zod y códigos HTTP normalizados
+
+- **Esquemas** en `backend/lib/schemas.js` (`login`, `register`, `refresh`, `product`, `category`, `order`) con mensajes en español.
+- **Middleware** `validate(schema)` en `backend/lib/validate.js`: valida `body` y responde `400` con `{ error, details }`.
+- **Aplicado** a `POST /api/login`, `/api/register`, `/api/auth/refresh`, `POST/PUT /api/admin/products`, `POST/PUT /api/admin/categories` y `POST /api/orders`.
+- **Códigos normalizados** en toda la API: `400` validación, `401` credenciales/token, `403` sin permiso (rol admin, auto-cambio de rol, borrar admin), `404` recurso no encontrado, `409` conflicto (duplicados, categoría con productos, último admin). El body siempre conserva `{ error }`, por lo que el frontend no necesita cambios para mostrarlo.
+
+### Prisma (ORM) y clave foránea real
+
+- `backend/prisma/schema.prisma` generado por introspección (`prisma db pull`) de las 6 tablas.
+- **Cliente Prisma 7** con driver adapter MariaDB (`backend/lib/prisma.js`); requiere `@prisma/client` + `@prisma/adapter-mariadb` y lee `DB_*` del entorno (se importa tras `dotenv`).
+- **FK real** `products.category_id → categories.id` (`ON DELETE SET NULL`) agregada con `prisma db push` y respaldada en los 16 productos; los INSERT/UPDATE de productos también la pueblan. La columna `categoria` (texto) se conserva como legado.
+- **Lecturas públicas migradas a Prisma:** `GET /api/categories` y `GET /api/products` (con su caché de 30 s y paginación intactos). El resto (admin, auth, orders) sigue en `mysql2` en esta iteración incremental.
+
+### TypeScript incremental
+
+- `backend/tsconfig.json` (`allowJs`, `noEmit`, Node16) y script `npm run typecheck` (`tsc --noEmit`).
+- `backend/types.ts` con los tipos compartidos de la API (validados por `tsc`).
+- El runtime sigue siendo CommonJS; la conversión a `.ts` de `server.js` queda pendiente para iteraciones siguientes.
+
+### Verificación
+
+- `node --check server.js` / `lib/*.js` y `npx tsc --noEmit`: OK.
+- API: `400` (email inválido, precio negativo, pedido vacío), `401` (credenciales, refresh malo), `403` (rol admin, auto-cambio de rol), `404` (producto/categoría/usuario inexistente), `409` (duplicados, categoría con productos): verificados con curl/PowerShell.
+- Checkout real: `POST /api/orders` crea el pedido (`201`, total recalculado) y persiste `order_items`/`reservations` en transacción.
+- Prisma: `SHOW INDEX`/`information_schema` confirman `fk_products_category`; seed idempotente deja `category_id` poblado.
+- Navegador: catálogo y panel admin siguen funcionando (0 errores de consola), ahora con el catálogo servido por Prisma.
+
+### Pendiente de la Fase 1
+
+- Migrar a Prisma el resto de rutas (admin, orders/reservations) y las escrituras.
+- Generar migraciones formales de Prisma (`prisma migrate dev`) en lugar de `db push`.
+- Conversión completa de `server.js` a TypeScript y `ts-node`/build en el arranque (PM2).
