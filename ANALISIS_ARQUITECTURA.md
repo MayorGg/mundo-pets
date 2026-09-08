@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 7 de septiembre de 2026 — Fase 0 de seguridad, Fase Infraestructura, Fase Procesamiento y Fase Visualización y diseño (completadas) + Fase 1 Calidad y Datos (TypeScript + Zod + Prisma: validación por endpoint, códigos HTTP normalizados, FK `products.category_id`, lecturas públicas con Prisma).
+> **Última actualización:** 7 de septiembre de 2026 — Fases 0, Infraestructura, Procesamiento y Visualización completadas + Fase 1 Calidad y Datos (Zod, códigos HTTP normalizados, Prisma con FK, typecheck TS) + Fase 2 Verificación automática (vitest/supertest y GitHub Actions CI).
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -37,6 +37,8 @@ mundo pets/
 ├── LICENSE
 ├── ANALISIS_ARQUITECTURA.md
 ├── ecosystem.config.js   (PM2)
+├── .github/
+│   └── workflows/ci.yml  (CI: typecheck + tests + build:css)
 ├── backend/
 │   ├── package.json
 │   ├── server.js
@@ -45,6 +47,13 @@ mundo pets/
 │   ├── seed-temp-user.js
 │   ├── migrate-passwords.js
 │   ├── users.json
+│   ├── lib/               (schemas.js, validate.js, prisma.js)
+│   ├── prisma/            (schema.prisma)
+│   ├── tests/             (auth, roles, products, orders)
+│   ├── vitest.config.mjs
+│   ├── tsconfig.json
+│   ├── types.ts
+│   ├── prisma7.config.ts
 │   ├── .env.example
 │   ├── .env.production    (plantilla; no versionado en uso real)
 │   └── .env              (no versionado)
@@ -574,7 +583,7 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 2. ~~Unificar códigos HTTP y formato de errores~~ **Hecho** (Fase 1): validación con Zod + códigos `400/401/403/404/409` y cuerpo `{ error, details? }`.
 3. ~~Añadir rate limiting~~ **Hecho** en login/registro; pendiente auditoría administrativa y validación de entrada más estricta.
 4. Externalizar el año/calendario de servicios. La URL de API ya usa el origen actual y conserva fallback a `http://localhost:5000` cuando se abre con `file:`.
-5. Añadir pruebas automatizadas para autenticación, autorización, CRUD y reglas de fechas.
+5. ~~Añadir pruebas automatizadas para autenticación, autorización, CRUD y reglas de fechas~~ **Hecho** (Fase 2): suite `vitest` + `supertest` (23 tests) y CI en GitHub Actions (ver sección 21).
 
 ### Prioridad de evolución funcional
 
@@ -750,3 +759,44 @@ Objetivo: tipar el backend, reemplazar gradualmente las queries SQL manuales por
 - Migrar a Prisma el resto de rutas (admin, orders/reservations) y las escrituras.
 - Generar migraciones formales de Prisma (`prisma migrate dev`) en lugar de `db push`.
 - Conversión completa de `server.js` a TypeScript y `ts-node`/build en el arranque (PM2).
+
+## 21. Verificación automática (Fase 2 — Testing + CI)
+
+Objetivo: detectar roturas antes de tocar pagos y disponibilidad (fase 3). Antes de esta fase no existía suite automatizada.
+
+### Suite de tests (vitest + supertest)
+
+- DevDeps: itest, supertest, cross-env (para NODE_ENV=test multiplataforma).
+- Config: ackend/vitest.config.mjs (globals: true, entorno 
+ode).
+- server.js exporta la app y solo escucha cuando se ejecuta directo (equire.main === module), para que supertest la use sin abrir puerto; los rate limiters se omiten en NODE_ENV=test.
+- Archivos: ackend/tests/{auth,roles,products,orders}.test.js + helpers.js.
+
+| Archivo | Cubre |
+|---|---|
+| uth.test.js | Registro (válido, email inválido 400, contraseña corta 400, duplicado 409), login (correcto, 401), refresh (400/401) |
+| oles.test.js | Sin token 401, refresh como bearer 401, usuario normal a admin 403, admin 200 |
+| products.test.js | Crear (puebla category_id), precio negativo 400, categoría inexistente 400, PUT 404, eliminar |
+| orders.test.js | Checkout: pedido vacío 400, pago inválido 400, reserva en domingo 400, fecha pasada 400, pedido con precio recalculado por el servidor (201), reserva con fecha válida |
+
+Las pruebas crean datos con nombres únicos (	est_*) y los limpian en fterAll con Prisma (usuarios, productos y pedidos; los pedidos borran en cascada sus líneas y reservas).
+
+### CI en GitHub Actions (.github/workflows/ci.yml)
+
+- **Backend:** servicio MySQL 8 (healthcheck), 
+pm ci, 	ypecheck (	sc --noEmit), 
+ode backend/seed.js (esquema + datos base) y 
+pm run test.
+- **Frontend:** 
+pm ci y 
+pm run build:css (valida que el CSS de Tailwind compile).
+- Se ejecuta en cada push (todas las ramas) y pull request.
+
+### Verificación
+
+- 
+pm run test local: **23/23 tests pasan** (4 archivos).
+- 
+pm --prefix backend run typecheck: OK.
+- El servidor (PM2) sigue funcionando tras el cambio de equire.main; catálogo servido correctamente.
+

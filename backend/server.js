@@ -67,10 +67,12 @@ const SECRET = process.env.JWT_SECRET || (() => {
 const ACCESS_EXPIRES = process.env.JWT_EXPIRES_IN || '2h';
 const REFRESH_EXPIRES = process.env.REFRESH_EXPIRES_IN || '7d';
 
-// Rate limiting en rutas de autenticación (20 intentos cada 15 min)
+// Rate limiting en rutas de autenticación (20 intentos cada 15 min); se desactiva en tests
+const limiterSkipTest = () => NODE_ENV === 'test';
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  skip: limiterSkipTest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' }
@@ -78,6 +80,7 @@ const loginLimiter = rateLimit({
 const registerLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  skip: limiterSkipTest,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos de registro. Intenta de nuevo en unos minutos.' }
@@ -860,7 +863,11 @@ app.post('/api/login', loginLimiter, validate(loginSchema), async (req, res) => 
   }
 });
 
-app.listen(Number(process.env.PORT || 5000), () => {
-  console.log(`Servidor corriendo en http://localhost:${process.env.PORT || 5000} (env: ${NODE_ENV})`);
-});
+if (require.main === module) {
+  app.listen(Number(process.env.PORT || 5000), () => {
+    console.log(`Servidor corriendo en http://localhost:${process.env.PORT || 5000} (env: ${NODE_ENV})`);
+  });
+}
+
+module.exports = app;
 
