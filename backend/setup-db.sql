@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS products (
   imagen VARCHAR(255) NULL,
   requiere_fecha TINYINT(1) NOT NULL DEFAULT 0,
   activo TINYINT(1) NOT NULL DEFAULT 1,
+  cupo_diario INT NOT NULL DEFAULT 5,
   INDEX idx_products_activo (activo),
   INDEX idx_products_categoria (categoria),
   INDEX idx_products_category_id (category_id),
@@ -80,4 +81,17 @@ CREATE TABLE IF NOT EXISTS reservations (
   INDEX idx_reservations_user_id (user_id),
   INDEX idx_reservations_date (reservation_date),
   INDEX idx_reservations_status (reservation_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS payments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_id INT NOT NULL,
+  provider VARCHAR(50) NOT NULL,
+  external_ref VARCHAR(100) NOT NULL UNIQUE,
+  amount DECIMAL(10,2) NOT NULL,
+  status ENUM('pending','paid','failed','cancelled') NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  INDEX idx_payments_order_id (order_id),
+  INDEX idx_payments_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -79,6 +79,8 @@ Tener una red de pruebas que detecte roturas antes de tocar pagos y disponibilid
 
 ## 4. Fase 3 — Ciclo comercial real (Pagos + Disponibilidad + Carrito)
 
+> **Estado (7-sep-2026):** en curso. Completado: infraestructura de pagos (tabla `payments`, `POST /api/orders/:id/pay` y webhook de confirmación con actualización de pedido/reservas), disponibilidad por cupo diario (`products.cupo_diario` validado en backend con `409`) y carrito persistente (ya estaba en `localStorage`). Pendiente: conectar el proveedor real (Wompi/ePayco) con sus credenciales y sandbox. Ver sección 22 de `ANALISIS_ARQUITECTURA.md`.
+
 ### Objetivo
 Cerrar los puntos de "prioridad alta" pendientes del análisis: pagos reales y validación de disponibilidad antes de confirmar una compra.
 

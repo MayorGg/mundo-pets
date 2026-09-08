@@ -873,11 +873,47 @@ async function processPayment() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'No se pudo crear el pedido');
+
+    // Si el método es en línea (PSE / Mercado Pago), simular la confirmación del proveedor
+    let mensaje = `Pedido #${data.order_id} por $${Number(data.total).toLocaleString()} registrado como pendiente.`;
+    let titulo = '¡Pedido creado!';
+    if (metodoPagoSeleccionado !== 'efectivo') {
+      Swal.showLoading();
+      try {
+        const payRes = await fetch(`${API_BASE_URL}/api/orders/${data.order_id}/pay`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+          },
+          body: JSON.stringify({ provider: metodoPagoSeleccionado })
+        });
+        const pay = await payRes.json();
+        if (!payRes.ok) throw new Error(pay.error || 'No se pudo iniciar el pago');
+
+        const webRes = await fetch(`${API_BASE_URL}/api/payments/webhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payment_id: pay.payment_id, status: 'paid' })
+        });
+        const web = await webRes.json();
+        if (!webRes.ok) throw new Error(web.error || 'No se pudo confirmar el pago');
+
+        titulo = '¡Pago exitoso!';
+        mensaje = `Pago de $${Number(data.total).toLocaleString()} confirmado para el pedido #${data.order_id}.`;
+      } catch (pagoError) {
+        titulo = 'Pedido creado, pago pendiente';
+        mensaje = `Pedido #${data.order_id} por $${Number(data.total).toLocaleString()} registrado. No se confirmó el pago: ${pagoError.message}`;
+      }
+    } else {
+      mensaje = `Pedido #${data.order_id} por $${Number(data.total).toLocaleString()} registrado. Realiza el pago en tienda.`;
+    }
+
     Swal.close();
     Swal.fire({
       icon: 'success',
-      title: '¡Pedido creado!',
-      text: `Pedido #${data.order_id} por $${Number(data.total).toLocaleString()} registrado como pendiente.`,
+      title: titulo,
+      text: mensaje,
       confirmButtonColor: '#28a745',
       confirmButtonText: 'Continuar'
     }).then(() => {

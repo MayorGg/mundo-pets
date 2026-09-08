@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 7 de septiembre de 2026 — Fases 0, Infraestructura, Procesamiento y Visualización completadas + Fase 1 Calidad y Datos (Zod, códigos HTTP normalizados, Prisma con FK, typecheck TS) + Fase 2 Verificación automática (vitest/supertest y GitHub Actions CI).
+> **Última actualización:** 7 de septiembre de 2026 — Fases 0, Infraestructura, Procesamiento y Visualización completadas + Fase 1 (Zod, HTTP normalizado, Prisma, typecheck) + Fase 2 (tests + CI) + Fase 3 Ciclo comercial real (pagos con infraestructura de proveedor y confirmación simulada, disponibilidad por cupo diario; el carrito ya persistía en `localStorage`).
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -26,7 +26,8 @@ El sistema tiene catálogo, autenticación, roles, administración de productos/
 | Carrito | Conservado en `localStorage` y enviado al crear pedido |
 | Reserva de servicios | Persistida como reserva pendiente dentro de un pedido |
 | Pedidos | Implementados con API y tablas; estado inicial `pending` |
-| Pagos | Simulados; no hay proveedor conectado |
+| Pagos | Infraestructura de pago lista (tabla `payments`, intención de pago y webhook); la confirmación se simula — falta conectar un proveedor real (Wompi/ePayco) con sus credenciales |
+| Disponibilidad | Reservas con cupo diario por servicio/fecha validado en backend |
 | Fallback sin MySQL | Solo cubre registro e inicio de sesión mediante `users.json` |
 
 ## 2. Estructura del repositorio
@@ -371,6 +372,15 @@ El registro comprueba campos requeridos, formato básico de email y duplicados. 
 
 **Rate limiting:** `POST /api/register` y `POST /api/login` están limitados a **20 peticiones cada 15 minutos** por IP (`express-rate-limit`); al superarlo responden `429`. El endpoint `/api/auth/refresh` no tiene límite.
 
+### Pedidos y pagos (usuario autenticado)
+
+| Método y ruta | Entrada/efecto |
+|---|---|
+| `POST /api/orders` | Crea pedido en transacción: recalcula precios desde BD, valida fecha/cupo de reservas, inserta `orders`, `order_items` y `reservations`. Respuesta `201` con `order_id`, `total` y `reservation_ids` |
+| `GET /api/orders` | Historial de pedidos del usuario (id, total, método, estado, fecha) |
+| `POST /api/orders/:id/pay` | Crea la intención de pago (`payments` en `pending`) para un pedido propio pendiente; con un proveedor real aquí se redirigiría a su checkout |
+| `POST /api/payments/webhook` | Confirma el pago (`payment_id`, `status`): `paid` → `orders.order_status='paid'`; `failed/cancelled` → `cancelled` y cancela las reservas del pedido. En producción lo invocaría el proveedor con firma a validar |
+
 ### Administración
 
 | Método y ruta | Entrada/efecto |
@@ -419,6 +429,7 @@ La base se llama `mundo_pets`, usa `utf8mb4` y está declarada en [backend/setup
 | `imagen` | `VARCHAR(255) NULL` | Ruta servida por Express: `/img/products/<id>.webp` (generada y optimizada con sharp); `NULL` si no hay imagen |
 | `requiere_fecha` | `TINYINT(1)` | Indica servicio con agenda |
 | `activo` | `TINYINT(1)` | Visibilidad en el catálogo público |
+| `cupo_diario` | `INT` | Máximo de reservas por día para servicios con agenda (validado en backend) |
 
 ### `categories`
 
@@ -433,9 +444,9 @@ La base se llama `mundo_pets`, usa `utf8mb4` y está declarada en [backend/setup
 
 No existe una clave foránea entre `products.categoria` y `categories`. La relación se realiza por igualdad de texto. Por eso el backend implementa manualmente la cascada cuando se renombra una categoría y bloquea su eliminación si encuentra productos asociados.
 
-### `orders`, `order_items` y `reservations`
+### `orders`, `order_items`, `reservations` y `payments`
 
-`orders` almacena el usuario, total recalculado, método de pago y estado (`pending`, `paid`, `processing` o `cancelled`). `order_items` conserva cada producto, cantidad y precio de la línea. `reservations` conserva las líneas de servicios con fecha, vinculadas al pedido, usuario y producto, con estado `pending`, `confirmed` o `cancelled`. Las tres tablas se crean en `setup-db.sql` y mediante `seed.js`, con claves foráneas e índices.
+`orders` almacena el usuario, total recalculado, método de pago y estado (`pending`, `paid`, `processing` o `cancelled`). `order_items` conserva cada producto, cantidad y precio de la línea. `reservations` conserva las líneas de servicios con fecha, vinculadas al pedido, usuario y producto, con estado `pending`, `confirmed` o `cancelled`. `payments` registra cada intención de pago (`order_id`, proveedor, referencia externa única, monto y estado `pending/paid/failed/cancelled`). Las cuatro tablas se crean en `setup-db.sql` y mediante `seed.js`, con claves foráneas e índices.
 
 `products` tiene dos índices para el catálogo: `idx_products_activo (activo)` e `idx_products_categoria (categoria)` (creados por `seed.js` si no existen y declarados en `setup-db.sql`).
 
@@ -759,44 +770,62 @@ Objetivo: tipar el backend, reemplazar gradualmente las queries SQL manuales por
 - Migrar a Prisma el resto de rutas (admin, orders/reservations) y las escrituras.
 - Generar migraciones formales de Prisma (`prisma migrate dev`) en lugar de `db push`.
 - Conversión completa de `server.js` a TypeScript y `ts-node`/build en el arranque (PM2).
-
 ## 21. Verificación automática (Fase 2 — Testing + CI)
 
 Objetivo: detectar roturas antes de tocar pagos y disponibilidad (fase 3). Antes de esta fase no existía suite automatizada.
 
 ### Suite de tests (vitest + supertest)
 
-- DevDeps: itest, supertest, cross-env (para NODE_ENV=test multiplataforma).
-- Config: ackend/vitest.config.mjs (globals: true, entorno 
-ode).
-- server.js exporta la app y solo escucha cuando se ejecuta directo (equire.main === module), para que supertest la use sin abrir puerto; los rate limiters se omiten en NODE_ENV=test.
-- Archivos: ackend/tests/{auth,roles,products,orders}.test.js + helpers.js.
+- DevDeps: `vitest`, `supertest`, `cross-env` (para `NODE_ENV=test` multiplataforma).
+- Config: `backend/vitest.config.mjs` (`globals: true`, entorno `node`).
+- `server.js` exporta la app y solo escucha cuando se ejecuta directo (`require.main === module`), para que supertest la use sin abrir puerto; los rate limiters se omiten en `NODE_ENV=test`.
+- Archivos: `backend/tests/{auth,roles,products,orders,pagos}.test.js` + `helpers.js`.
 
 | Archivo | Cubre |
 |---|---|
-| uth.test.js | Registro (válido, email inválido 400, contraseña corta 400, duplicado 409), login (correcto, 401), refresh (400/401) |
-| oles.test.js | Sin token 401, refresh como bearer 401, usuario normal a admin 403, admin 200 |
-| products.test.js | Crear (puebla category_id), precio negativo 400, categoría inexistente 400, PUT 404, eliminar |
-| orders.test.js | Checkout: pedido vacío 400, pago inválido 400, reserva en domingo 400, fecha pasada 400, pedido con precio recalculado por el servidor (201), reserva con fecha válida |
+| `auth.test.js` | Registro (válido, email inválido 400, contraseña corta 400, duplicado 409), login (correcto, 401), refresh (400/401) |
+| `roles.test.js` | Sin token 401, refresh como bearer 401, usuario normal a admin 403, admin 200 |
+| `products.test.js` | Crear (puebla `category_id`), precio negativo 400, categoría inexistente 400, PUT 404, eliminar |
+| `orders.test.js` | Checkout: pedido vacío 400, pago inválido 400, reserva en domingo 400, fecha pasada 400, pedido con precio recalculado por el servidor (201), reserva con fecha válida |
+| `pagos.test.js` | Cupo diario (409 al exceder), intención de pago + webhook → pedido `paid`, pedido ajeno 403 |
 
-Las pruebas crean datos con nombres únicos (	est_*) y los limpian en fterAll con Prisma (usuarios, productos y pedidos; los pedidos borran en cascada sus líneas y reservas).
+Las pruebas crean datos con nombres únicos (`test_*`) y los limpian en `afterAll` con Prisma (usuarios, productos y pedidos; los pedidos borran en cascada sus líneas, reservas y pagos).
 
-### CI en GitHub Actions (.github/workflows/ci.yml)
+### CI en GitHub Actions (`.github/workflows/ci.yml`)
 
-- **Backend:** servicio MySQL 8 (healthcheck), 
-pm ci, 	ypecheck (	sc --noEmit), 
-ode backend/seed.js (esquema + datos base) y 
-pm run test.
-- **Frontend:** 
-pm ci y 
-pm run build:css (valida que el CSS de Tailwind compile).
+- **Backend:** servicio MySQL 8 (healthcheck), `npm ci`, `typecheck` (`tsc --noEmit`), `node backend/seed.js` (esquema + datos base) y `npm run test`.
+- **Frontend:** `npm ci` y `npm run build:css` (valida que el CSS de Tailwind compile).
 - Se ejecuta en cada push (todas las ramas) y pull request.
 
 ### Verificación
 
-- 
-pm run test local: **23/23 tests pasan** (4 archivos).
-- 
-pm --prefix backend run typecheck: OK.
-- El servidor (PM2) sigue funcionando tras el cambio de equire.main; catálogo servido correctamente.
+- `npm run test` local: **27/27 tests pasan** (5 archivos).
+- `npm --prefix backend run typecheck`: OK.
+- El servidor (PM2) sigue funcionando tras el cambio de `require.main`; catálogo servido correctamente.
+## 22. Ciclo comercial real (Fase 3)
 
+Objetivo: cerrar los puntos de prioridad alta pendientes: pagos y validación de disponibilidad antes de confirmar una compra.
+
+### Carrito persistente
+
+El carrito ya se guardaba en `localStorage` (`mundoPetsCart`) y se envía al crear el pedido; sobrevive al recargar. No se requirió trabajo adicional en esta fase.
+
+### Pagos (infraestructura de proveedor, confirmación simulada)
+
+- Nueva tabla `payments` (intención de pago por pedido: proveedor, referencia externa, monto, estado).
+- `POST /api/orders/:id/pay`: crea la intención de pago (`pending`) para un pedido propio pendiente; solo métodos en línea (PSE / Mercado Pago).
+- `POST /api/payments/webhook`: confirma el pago (`paid`) y marca el pedido como `paid`, o lo cancela (`failed`/`cancelled`) cancelando también sus reservas.
+- En producción este webhook lo invocará el proveedor (Wompi/ePayco) con firma a validar; aquí se usa para simular la confirmación. El frontend, tras crear el pedido, llama a `pay` y al webhook (métodos en línea) y muestra «¡Pago exitoso!»; para efectivo deja el pedido en `pending` («Paga en tienda»).
+- Pendiente: credenciales del proveedor elegido y redirección/embebido real de su checkout.
+
+### Disponibilidad por cupo diario
+
+- Columna `products.cupo_diario` (por defecto 5) configurable en el panel admin (campo "Cupo diario").
+- La ruta de pedidos, dentro de la transacción, cuenta las reservas existentes para `(product_id, reservation_date)`; si `reservados + cantidad > cupo_diario` responde `409`.
+
+### Verificación
+
+- Cupo: con cupo 1, una segunda reserva del mismo servicio/fecha responde `409` «Sin cupo disponible».
+- Pago: pedido → `pay` (201, `payment_id`) → webhook `paid` → `orders.order_status='paid'` y `payments.status='paid'`.
+- Navegador: checkout con PSE muestra «¡Pago exitoso! Pago de $45.000 confirmado para el pedido #N» (0 errores de consola).
+- Suite: 27/27 tests (se agregó `tests/pagos.test.js`).

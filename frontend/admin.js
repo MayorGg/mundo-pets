@@ -242,6 +242,7 @@ function abrirModalProducto(id) {
   document.getElementById('prodNombre').value = '';
   document.getElementById('prodCategoria').value = 'Alimentos';
   document.getElementById('prodPrecio').value = '';
+  document.getElementById('prodCupo').value = 5;
   document.getElementById('prodDescripcion').value = '';
   document.getElementById('prodFecha').checked = false;
   document.getElementById('prodActivo').checked = true;
@@ -257,6 +258,7 @@ function abrirModalProducto(id) {
       document.getElementById('prodNombre').value = p.nombre;
       document.getElementById('prodCategoria').value = p.categoria;
       document.getElementById('prodPrecio').value = Number(p.precio);
+      document.getElementById('prodCupo').value = p.cupo_diario || 5;
       document.getElementById('prodDescripcion').value = p.descripcion || '';
       document.getElementById('prodFecha').checked = !!p.requiere_fecha;
       document.getElementById('prodActivo').checked = !!p.activo;
@@ -314,7 +316,8 @@ async function guardarProducto() {
     precio: Number(document.getElementById('prodPrecio').value),
     descripcion: document.getElementById('prodDescripcion').value.trim(),
     requiere_fecha: document.getElementById('prodFecha').checked,
-    activo: document.getElementById('prodActivo').checked
+    activo: document.getElementById('prodActivo').checked,
+    cupo_diario: Number(document.getElementById('prodCupo').value) || 5
   };
 
   if (!payload.nombre) {

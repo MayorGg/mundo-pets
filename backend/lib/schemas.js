@@ -25,7 +25,8 @@ const productSchema = z.object({
   descripcion: z.string().max(1000).optional().default(''),
   imagen: z.string().nullable().optional(),
   requiere_fecha: z.boolean().optional(),
-  activo: z.boolean().optional()
+  activo: z.boolean().optional(),
+  cupo_diario: z.number().int().min(1, 'El cupo diario debe ser al menos 1').max(999).optional().default(5)
 });
 
 const categorySchema = z.object({

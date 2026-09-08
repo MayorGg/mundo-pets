@@ -313,7 +313,7 @@ app.post('/api/orders', requireAuth, validate(orderSchema), async (req, res) => 
     await conn.beginTransaction();
     const placeholders = productIds.map(() => '?').join(',');
     const [products] = await conn.query(
-      `SELECT id, precio, requiere_fecha FROM products WHERE id IN (${placeholders}) AND activo = 1 FOR UPDATE`,
+      `SELECT id, precio, requiere_fecha, cupo_diario FROM products WHERE id IN (${placeholders}) AND activo = 1 FOR UPDATE`,
       productIds
     );
     const productsById = new Map(products.map(product => [product.id, product]));
@@ -337,6 +337,18 @@ app.post('/api/orders', requireAuth, validate(orderSchema), async (req, res) => 
         if (!reservationDate || reservationDate <= today || reservationDate.getUTCDay() === 0) {
           await conn.rollback();
           return res.status(400).json({ error: 'La fecha de reserva debe ser futura y no puede ser domingo' });
+        }
+        // Disponibilidad por cupo diario: contar reservas existentes para el servicio+ fecha
+        const [[{ n: reservados }]] = await conn.query(
+          'SELECT COUNT(*) AS n FROM reservations WHERE product_id = ? AND reservation_date = ?',
+          [item.productId, item.date]
+        );
+        const cupo = Number(product.cupo_diario) || 0;
+        if (reservados + item.quantity > cupo) {
+          await conn.rollback();
+          return res.status(409).json({
+            error: `Sin cupo disponible para ${item.date} en este servicio. Máximo ${cupo} por día.`
+          });
         }
       }
       total += Number(product.precio) * item.quantity;
@@ -396,8 +408,76 @@ app.get('/api/orders', requireAuth, async (req, res) => {
   }
 });
 
+// ---- Pagos (infraestructura lista para proveedor real; confirmación simulada) ----
+
+// Crea una intención de pago para un pedido pendiente (PSE / Mercado Pago).
+// Con un proveedor real (Wompi/ePayco) aquí se redirigiría al checkout del proveedor.
+app.post('/api/orders/:id/pay', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  const { provider } = req.body || {};
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido' });
+  if (!PAYMENT_METHODS.has(provider)) return res.status(400).json({ error: 'Método de pago no válido' });
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.query('SELECT id, user_id, total, order_status FROM orders WHERE id = ?', [id]);
+      if (!rows.length) return res.status(404).json({ error: 'Pedido no encontrado' });
+      if (Number(rows[0].user_id) !== Number(req.user.id)) {
+        return res.status(403).json({ error: 'Este pedido no te pertenece' });
+      }
+      if (rows[0].order_status !== 'pending') {
+        return res.status(409).json({ error: 'El pedido ya no está pendiente de pago' });
+      }
+      const externalRef = `sim_${crypto.randomBytes(8).toString('hex')}`;
+      const [result] = await conn.query(
+        'INSERT INTO payments (order_id, provider, external_ref, amount, status) VALUES (?, ?, ?, ?, ?)',
+        [id, provider, externalRef, rows[0].total, 'pending']
+      );
+      res.status(201).json({ message: 'Intención de pago creada', payment_id: result.insertId, external_ref: externalRef, provider });
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('Error creando pago:', err.message);
+    res.status(500).json({ error: 'No se pudo crear la intención de pago' });
+  }
+});
+
+// Webhook de confirmación de pago. En producción lo llamaría el proveedor (con firma
+// a validar); aquí se usa para simular la confirmación y actualizar pedido + reservas.
+app.post('/api/payments/webhook', async (req, res) => {
+  const { payment_id, status } = req.body || {};
+  if (!Number.isInteger(Number(payment_id))) return res.status(400).json({ error: 'payment_id requerido' });
+  if (!['paid', 'failed', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Estado no válido' });
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.query('SELECT id, order_id, status FROM payments WHERE id = ?', [payment_id]);
+      if (!rows.length) return res.status(404).json({ error: 'Pago no encontrado' });
+
+      await conn.query('UPDATE payments SET status = ? WHERE id = ?', [status, payment_id]);
+
+      if (status === 'paid') {
+        await conn.query('UPDATE orders SET order_status = ? WHERE id = ?', ['paid', rows[0].order_id]);
+      } else {
+        await conn.query('UPDATE orders SET order_status = ? WHERE id = ?', ['cancelled', rows[0].order_id]);
+        await conn.query(
+          "UPDATE reservations SET reservation_status = 'cancelled' WHERE order_id = ?",
+          [rows[0].order_id]
+        );
+      }
+      res.json({ message: 'Pago actualizado', status });
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('Error en webhook de pago:', err.message);
+    res.status(500).json({ error: 'No se pudo procesar el webhook' });
+  }
+});
+
 function productoParams(req) {
-  const { nombre, categoria, precio, descripcion, imagen, requiere_fecha, activo } = req.body;
+  const { nombre, categoria, precio, descripcion, imagen, requiere_fecha, activo, cupo_diario } = req.body;
   return {
     nombre: String(nombre || '').trim(),
     categoria: String(categoria || '').trim(),
@@ -405,7 +485,8 @@ function productoParams(req) {
     descripcion: descripcion ? String(descripcion) : '',
     imagen: imagen ? String(imagen) : null,
     requiere_fecha: requiere_fecha ? 1 : 0,
-    activo: activo === undefined ? 1 : (activo ? 1 : 0)
+    activo: activo === undefined ? 1 : (activo ? 1 : 0),
+    cupo_diario: Number(cupo_diario) || 5
   };
 }
 
@@ -723,8 +804,8 @@ app.post('/api/admin/products', requireAdmin, validate(productSchema), async (re
       const [catExists] = await conn.query('SELECT id FROM categories WHERE nombre = ?', [p.categoria]);
       if (!catExists.length) return res.status(400).json({ error: 'La categoría no existe' });
 const [result] = await conn.query(
-        'INSERT INTO products (nombre, categoria, category_id, precio, descripcion, imagen, requiere_fecha, activo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [p.nombre, p.categoria, catExists[0].id, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo]
+        'INSERT INTO products (nombre, categoria, category_id, precio, descripcion, imagen, requiere_fecha, activo, cupo_diario) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [p.nombre, p.categoria, catExists[0].id, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo, p.cupo_diario]
       );
       invalidarCatalogo();
       res.json({ message: 'Producto creado', id: result.insertId });
@@ -750,8 +831,8 @@ app.put('/api/admin/products/:id', requireAdmin, validate(productSchema), async 
       const [catExists] = await conn.query('SELECT id FROM categories WHERE nombre = ?', [p.categoria]);
       if (!catExists.length) return res.status(400).json({ error: 'La categoría no existe' });
       const [result] = await conn.query(
-        'UPDATE products SET nombre = ?, categoria = ?, category_id = ?, precio = ?, descripcion = ?, imagen = ?, requiere_fecha = ?, activo = ? WHERE id = ?',
-        [p.nombre, p.categoria, catExists[0].id, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo, id]
+        'UPDATE products SET nombre = ?, categoria = ?, category_id = ?, precio = ?, descripcion = ?, imagen = ?, requiere_fecha = ?, activo = ?, cupo_diario = ? WHERE id = ?',
+        [p.nombre, p.categoria, catExists[0].id, p.precio, p.descripcion, p.imagen, p.requiere_fecha, p.activo, p.cupo_diario, id]
       );
 if (result.affectedRows === 0) return res.status(404).json({ error: 'Producto no encontrado' });
       invalidarCatalogo();

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="dist/tailwind.css?v=3" />
+  <link rel="stylesheet" href="dist/tailwind.css?v=4" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
@@ -251,6 +251,13 @@
               <label for="prodPrecio" class="mb-1.5 block text-sm font-semibold text-muted">Precio ($)</label>
               <input id="prodPrecio" type="number" min="0" step="500" class="input-field w-full px-4 py-3" placeholder="0">
             </div>
+          </div>
+          <div>
+            <label for="prodCupo" class="mb-1.5 block text-sm font-semibold text-muted">Cupo diario (servicios con agenda)</label>
+            <input id="prodCupo" type="number" min="1" max="999" class="input-field w-full px-4 py-3" placeholder="5">
+            <p class="mt-1.5 text-sm text-muted">
+              <i class="fas fa-info-circle mr-1"></i>Máximo de reservas por día para este servicio.
+            </p>
           </div>
           <div>
             <label for="prodDescripcion" class="mb-1.5 block text-sm font-semibold text-muted">Descripción</label>
