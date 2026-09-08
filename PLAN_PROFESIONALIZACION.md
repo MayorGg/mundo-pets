@@ -109,6 +109,8 @@ Cerrar los puntos de "prioridad alta" pendientes del análisis: pagos reales y v
 
 ## 5. Fase 4 — Experiencia (Alpine.js sobre el HTML actual)
 
+> **Estado (8-sep-2026):** completada. Alpine.js vendido localmente en `frontend/vendor/alpine.min.js` (sin CDN), modales convertidos a `x-show`/`x-cloak` con store perezoso, cierre con Escape robusto y fallback sin Alpine; se corrigió un `TypeError` de inicialización en el navegador real. Ver sección 23 de `ANALISIS_ARQUITECTURA.md`.
+
 ### Objetivo
 Reducir la complejidad de estado en `script.js`/`admin.js` sin introducir un bundler ni reescribir el frontend.
 

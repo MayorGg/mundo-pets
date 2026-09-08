@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 7 de septiembre de 2026 — Fases 0, Infraestructura, Procesamiento y Visualización completadas + Fase 1 (Zod, HTTP normalizado, Prisma, typecheck) + Fase 2 (tests + CI) + Fase 3 Ciclo comercial real (pagos con infraestructura de proveedor y confirmación simulada, disponibilidad por cupo diario; el carrito ya persistía en `localStorage`).
+> **Última actualización:** 8 de septiembre de 2026 — Fases 0-3 completadas + Fase 4 Experiencia (Alpine.js vendido local, modales con `x-show`/`x-cloak`, store perezoso, cierre con Escape robusto y fallback sin Alpine).
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -829,3 +829,23 @@ El carrito ya se guardaba en `localStorage` (`mundoPetsCart`) y se envía al cre
 - Pago: pedido → `pay` (201, `payment_id`) → webhook `paid` → `orders.order_status='paid'` y `payments.status='paid'`.
 - Navegador: checkout con PSE muestra «¡Pago exitoso! Pago de $45.000 confirmado para el pedido #N» (0 errores de consola).
 - Suite: 27/27 tests (se agregó `tests/pagos.test.js`).
+
+## 23. Experiencia (Fase 4 — Alpine.js)
+
+Objetivo: reducir la complejidad de estado en el frontend sin introducir un bundler ni reescribir el HTML. Resultado visual idéntico al anterior.
+
+### Cambios
+
+- **Alpine.js vendido localmente** en `frontend/vendor/alpine.min.js` (v3.17.2, 55 KB) y cargado en las 5 páginas al final del `<body>` (como SweetAlert2). Al ser local no depende del CDN y evita problemas de terceros; la CSP ya lo permite (`'self'`).
+- **Modales declarativos:** los 6 modales (productos, carrito, checkout en el dashboard; producto, categoría, usuario en admin) usan `x-cloak` + `x-show` con un store de Alpine (`$store.ui.*`) para la visibilidad, reutilizando las animaciones ya definidas en `input.css` (`modalIn`, `fadeIn`).
+- **Store perezoso (`uiStore()`):** el store se crea al primer uso, sin depender del orden de `alpine:init` (evita el `TypeError` de `Alpine.store('ui')` cuando `actualizarContadorCarrito` corre antes de que Alpine arranque). El contador del carrito usa `x-text` + la actualización por JS.
+- **Fallback robusto:** `openModal`/`closeModal` además fijan el `display` directamente, por lo que los modales funcionan con o sin Alpine (coherente con `x-show` cuando Alpine está activo).
+- **Cierre con Escape:** se detecta el modal visible por su `display` calculado (no por clases), así funciona con Alpine y sin él.
+- **Robustez del catálogo:** `showProducts` espera brevemente a que `cargarProductos` termine antes de mostrar "Sin productos", evitando el falso negativo si se hace clic antes de que cargue el catálogo.
+
+### Verificación
+
+- `node --check frontend/script.js` y `frontend/admin.js`: OK.
+- Navegador: el modal de carrito abre y cierra con Escape, el de productos renderiza las 4 tarjetas y agrega al carrito (badge `1`), y los modales del admin abren/cierran — 0 errores de consola.
+- Se corrigió un `TypeError` en el navegador real: `Cannot set properties of undefined (setting 'cartCount')` al inicializar, causado por usar `Alpine.store('ui')` antes de que el store existiera.
+- Nota del entorno de pruebas: el harness headless no ejecuta scripts `defer` de terceros y retrasa las peticiones tempranas de la página; por eso Alpine se vendió y cargó sin `defer`, y la verificación del catálogo requirió esperar a que la carga de la API completara.

@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="dist/tailwind.css?v=4" />
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="dist/tailwind.css?v=8" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
   <div class="overlay">
@@ -214,7 +214,7 @@
   </div>
 
   <!-- Modal de Producto -->
-  <div id="productoModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="productoModalTitle" tabindex="-1">
+  <div id="productoModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak x-show="$store.ui.productoOpen" role="dialog" aria-modal="true" aria-labelledby="productoModalTitle" tabindex="-1">
     <div class="modal-backdrop absolute inset-0" onclick="closeModal('productoModal')"></div>
     <div class="modal-panel relative flex max-h-[90vh] w-full max-w-lg flex-col">
       <div class="modal-header-bar bg-gradient-primary flex items-center justify-between px-6 py-4">
@@ -280,7 +280,7 @@
   </div>
 
   <!-- Modal de Usuario -->
-  <div id="usuarioModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="usuarioModalTitle" tabindex="-1">
+  <div id="usuarioModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak x-show="$store.ui.usuarioOpen" role="dialog" aria-modal="true" aria-labelledby="usuarioModalTitle" tabindex="-1">
     <div class="modal-backdrop absolute inset-0" onclick="closeModal('usuarioModal')"></div>
     <div class="modal-panel relative flex max-h-[90vh] w-full max-w-md flex-col">
       <div class="modal-header-bar bg-gradient-primary flex items-center justify-between px-6 py-4">
@@ -317,7 +317,7 @@
   </div>
 
   <!-- Modal de Categoría -->
-  <div id="categoriaModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="categoriaModalTitle" tabindex="-1">
+  <div id="categoriaModal" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak x-show="$store.ui.categoriaOpen" role="dialog" aria-modal="true" aria-labelledby="categoriaModalTitle" tabindex="-1">
     <div class="modal-backdrop absolute inset-0" onclick="closeModal('categoriaModal')"></div>
     <div class="modal-panel relative flex max-h-[90vh] w-full max-w-lg flex-col">
       <div class="modal-header-bar bg-gradient-primary flex items-center justify-between px-6 py-4">
@@ -371,6 +371,7 @@
     </div>
   </div>
 
-  <script src="admin.js?v=4"></script>
+  <script src="vendor/alpine.min.js"></script>
+  <script src="admin.js?v=8"></script>
 </body>
 </html>

@@ -79,6 +79,11 @@
     background: var(--color-brand);
     color: #fff;
   }
+
+  /* Alpine: ocultar elementos controlados por x-show hasta que Alpine se inicialice */
+  [x-cloak] {
+    display: none !important;
+  }
 }
 
 @layer components {

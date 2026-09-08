@@ -68,12 +68,32 @@ async function apiFetch(url, options = {}) {
   return res.json();
 }
 
-// Modales
+// Modales (visibilidad declarativa con Alpine via x-show; hay fallback directo)
+const MODAL_STORE_KEY = {
+  productoModal: 'productoOpen',
+  categoriaModal: 'categoriaOpen',
+  usuarioModal: 'usuarioOpen'
+};
+
+function uiStore() {
+  if (!window.Alpine) return null;
+  if (!Alpine.store('ui')) {
+    Alpine.store('ui', {
+      productoOpen: false,
+      categoriaOpen: false,
+      usuarioOpen: false
+    });
+  }
+  return Alpine.store('ui');
+}
+
 function openModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.classList.remove('hidden');
-  el.classList.add('flex');
+  const ui = uiStore();
+  if (ui) ui[MODAL_STORE_KEY[id]] = true;
+  el.removeAttribute('x-cloak');
+  el.style.display = 'flex';
   el.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   const focusable = el.querySelector('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
@@ -83,23 +103,27 @@ function openModal(id) {
 function closeModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.classList.add('hidden');
-  el.classList.remove('flex');
+  const ui = uiStore();
+  if (ui) ui[MODAL_STORE_KEY[id]] = false;
+  el.style.display = 'none';
   el.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
 }
 
 document.addEventListener('keydown', (e) => {
-  const open = ['productoModal', 'categoriaModal', 'usuarioModal'].map(id => document.getElementById(id))
-    .find(el => el && !el.classList.contains('hidden'));
+  const open = ['productoModal', 'categoriaModal', 'usuarioModal']
+    .map(id => document.getElementById(id))
+    .find(el => el && getComputedStyle(el).display !== 'none');
   if (!open) return;
+  const id = open.id;
+  const el = open;
   if (e.key === 'Escape') {
-    closeModal(open.id);
+    closeModal(id);
     return;
   }
   if (e.key !== 'Tab') return;
-  const focusable = [...open.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-    .filter(el => !el.disabled && el.offsetParent !== null);
+  const focusable = [...el.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter(x => !x.disabled && x.offsetParent !== null);
   if (focusable.length < 2) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];

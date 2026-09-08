@@ -80,28 +80,50 @@ let fechaServicioSeleccionada = null;
 let calendarioMes = 7;
 let categoriaServicioActual = null;
 
-// Gestión de modales sin Bootstrap
+// Gestión de modales sin Bootstrap (Alpine maneja la visibilidad vía x-show; hay fallback directo)
 const MODALS = ['productsModal', 'cartModal', 'checkoutModal'];
+const MODAL_STORE_KEY = {
+  productsModal: 'productsOpen',
+  cartModal: 'cartOpen',
+  checkoutModal: 'checkoutOpen'
+};
 let lastFocused = null;
+
+// Acceso perezoso al store de UI: lo crea si aún no existe (no depende del orden de alpine:init)
+function uiStore() {
+  if (!window.Alpine) return null;
+  if (!Alpine.store('ui')) {
+    Alpine.store('ui', {
+      productsOpen: false,
+      cartOpen: false,
+      checkoutOpen: false,
+      cartCount: 0
+    });
+  }
+  return Alpine.store('ui');
+}
 
 function openModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.classList.remove('hidden');
-  el.classList.add('flex');
+  const ui = uiStore();
+  if (ui) ui[MODAL_STORE_KEY[id]] = true;
+  // Garantizar visibilidad directa (coherente con x-show; funciona también sin Alpine)
+  el.removeAttribute('x-cloak');
+  el.style.display = 'flex';
   el.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   lastFocused = document.activeElement;
   const focusable = el.querySelector('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
   if (focusable) focusable.focus();
-  el.dataset.previousFocus = lastFocused && lastFocused.id ? lastFocused.id : '';
 }
 
 function closeModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.classList.add('hidden');
-  el.classList.remove('flex');
+  const ui = uiStore();
+  if (ui) ui[MODAL_STORE_KEY[id]] = false;
+  el.style.display = 'none';
   el.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
   if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
@@ -132,7 +154,7 @@ function renderEmptyState(icon, title, message) {
 // Cerrar modales con Escape
 document.addEventListener('keydown', (e) => {
   const open = MODALS.map(id => document.getElementById(id))
-    .find(el => el && !el.classList.contains('hidden'));
+    .find(el => el && getComputedStyle(el).display !== 'none');
   if (!open) return;
   if (e.key === 'Escape') {
     closeModal(open.id);
@@ -590,11 +612,19 @@ function logout() {
 }
 
 // Funciones del catálogo
-function showProducts(categoria) {
+async function showProducts(categoria) {
   const modalTitle = document.getElementById('modalTitle');
   const productsContainer = document.getElementById('productsContainer');
-  const productos = PRODUCTOS[categoria];
   const conAgenda = CATEGORIAS_CON_AGENDA.includes(categoria);
+
+  // Esperar brevemente a que el catálogo termine de cargar antes de decir que no hay productos
+  let productos = PRODUCTOS[categoria];
+  if (!productos || productos.length === 0) {
+    for (let i = 0; i < 20 && (!productos || productos.length === 0); i++) {
+      await new Promise(r => setTimeout(r, 100));
+      productos = PRODUCTOS[categoria];
+    }
+  }
 
   if (!productos || productos.length === 0) {
     Swal.fire({
@@ -694,6 +724,8 @@ function agregarAlCarrito(id, nombre, precio, requiereFecha) {
 function actualizarContadorCarrito() {
   const totalItems = carrito.reduce((total, item) => total + item.cantidad, 0);
   localStorage.setItem('mundoPetsCart', JSON.stringify(carrito));
+  const ui = uiStore();
+  if (ui) ui.cartCount = totalItems;
   const counter = document.getElementById('cart-count');
   if (!counter) return;
   counter.textContent = totalItems;
