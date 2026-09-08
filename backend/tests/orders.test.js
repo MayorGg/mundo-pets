@@ -65,6 +65,16 @@ describe('Pedidos (checkout y reglas de fecha)', () => {
     creados.push(res.body.order_id);
   });
 
+  it('acepta el formato legacy reservation_date (compatibilidad con el frontend)', async () => {
+    const res = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ items: [{ product_id: 9, quantity: 1, reservation_date: futureWeekday(7) }], payment_method: 'efectivo' });
+    expect(res.status).toBe(201);
+    expect(res.body.reservation_ids.length).toBe(1);
+    creados.push(res.body.order_id);
+  });
+
   afterAll(async () => {
     if (creados.length) {
       // El borrado en cascada elimina order_items y reservations

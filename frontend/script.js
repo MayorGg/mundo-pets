@@ -882,7 +882,7 @@ async function processPayment() {
   const items = carrito.map(item => ({
     product_id: item.id,
     quantity: item.cantidad,
-    reservation_date: item.fecha || null
+    date: item.fecha || null
   }));
 
   Swal.fire({

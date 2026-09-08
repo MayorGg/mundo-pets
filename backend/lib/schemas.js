@@ -48,7 +48,8 @@ const orderSchema = z.object({
     id: z.number().int().positive().optional(),
     product_id: z.number().int().positive().optional(),
     quantity: z.number().int().min(1, 'Cantidad inválida').max(100, 'Cantidad máxima 100'),
-    date: z.string().nullable().optional()
+    date: z.string().nullable().optional(),
+    reservation_date: z.string().nullable().optional()
   }).refine(d => d.id !== undefined || d.product_id !== undefined, {
     message: 'Cada línea debe tener un producto'
   })).min(1, 'El pedido debe contener al menos un producto'),
