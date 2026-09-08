@@ -20,4 +20,11 @@ function futureSunday() {
   return d.toISOString().slice(0, 10);
 }
 
-module.exports = { uid, futureWeekday, futureSunday };
+// Hoy en zona America/Bogota en formato YYYY-MM-DD
+function todayBogota() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+}
+
+module.exports = { uid, futureWeekday, futureSunday, todayBogota };

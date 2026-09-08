@@ -1,7 +1,7 @@
 const request = require('supertest');
 const app = require('../server');
 const prisma = require('../lib/prisma');
-const { futureWeekday, futureSunday } = require('./helpers');
+const { futureWeekday, futureSunday, todayBogota } = require('./helpers');
 
 describe('Pedidos (checkout y reglas de fecha)', () => {
   let token;
@@ -42,6 +42,15 @@ describe('Pedidos (checkout y reglas de fecha)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ items: [{ id: 9, quantity: 1, date: '2020-01-01' }], payment_method: 'pse' });
     expect(res.status).toBe(400);
+  });
+
+  it.skipIf(new Date(`${todayBogota()}T00:00:00Z`).getUTCDay() === 0)('permite reservar para hoy', async () => {
+    const res = await request(app)
+      .post('/api/orders')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ items: [{ id: 9, quantity: 1, date: todayBogota() }], payment_method: 'efectivo' });
+    expect(res.status).toBe(201);
+    creados.push(res.body.order_id);
   });
 
   it('crea pedido recalculando precios desde el servidor (201)', async () => {

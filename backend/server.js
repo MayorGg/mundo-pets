@@ -332,11 +332,17 @@ app.post('/api/orders', requireAuth, validate(orderSchema), async (req, res) => 
       }
       if (item.date) {
         const reservationDate = parseReservationDate(item.date);
-        const today = new Date();
-        today.setUTCHours(0, 0, 0, 0);
-        if (!reservationDate || reservationDate <= today || reservationDate.getUTCDay() === 0) {
+        if (!reservationDate) {
           await conn.rollback();
-          return res.status(400).json({ error: 'La fecha de reserva debe ser futura y no puede ser domingo' });
+          return res.status(400).json({ error: 'La fecha de reserva no es válida' });
+        }
+        // Se permite reservar para hoy o fechas futuras (Bogotá); se rechazan las pasadas y los domingos
+        const hoy = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(new Date());
+        if (item.date < hoy || reservationDate.getUTCDay() === 0) {
+          await conn.rollback();
+          return res.status(400).json({ error: 'La fecha de reserva debe ser hoy o futura y no puede ser domingo' });
         }
         // Disponibilidad por cupo diario: contar reservas existentes para el servicio+ fecha
         const [[{ n: reservados }]] = await conn.query(
