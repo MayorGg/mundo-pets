@@ -252,7 +252,7 @@ function renderProductos() {
           <button type="button" onclick="abrirModalProducto(${p.id})" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Editar ${esc(p.nombre)}">
             <i class="fas fa-pen"></i>
           </button>
-          <button type="button" onclick="eliminarProducto(${p.id})" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-sm text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar ${esc(p.nombre)}">
+          <button type="button" onclick="eliminarProducto(${p.id})" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-sm text-danger transition hover:bg-danger hover:text-white" aria-label="Eliminar ${esc(p.nombre)}">
             <i class="fas fa-trash"></i>
           </button>
         </div>
@@ -468,7 +468,7 @@ function renderCategorias() {
           <button type="button" onclick="abrirModalCategoria(${c.id})" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Editar categoría ${esc(c.nombre)}">
             <i class="fas fa-pen"></i>
           </button>
-          <button type="button" onclick="eliminarCategoria(${c.id})" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-sm text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar categoría ${esc(c.nombre)}">
+          <button type="button" onclick="eliminarCategoria(${c.id})" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-sm text-danger transition hover:bg-danger hover:text-white" aria-label="Eliminar categoría ${esc(c.nombre)}">
             <i class="fas fa-trash"></i>
           </button>
         </div>
@@ -602,7 +602,7 @@ function renderUsuarios() {
           <button type="button" onclick="abrirModalUsuario(${u.id})" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Editar permisos de ${esc(u.username)}" title="Cambiar permisos">
             <i class="fas fa-user-shield"></i>
           </button>
-          <button type="button" onclick="eliminarUsuario(${u.id})" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-sm text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar usuario ${esc(u.username)}">
+          <button type="button" onclick="eliminarUsuario(${u.id})" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-sm text-danger transition hover:bg-danger hover:text-white" aria-label="Eliminar usuario ${esc(u.username)}">
             <i class="fas fa-trash"></i>
           </button>
         </div>

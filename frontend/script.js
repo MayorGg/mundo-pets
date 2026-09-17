@@ -776,7 +776,7 @@ function showCart() {
               </button>
             </div>
             <div class="text-center font-bold text-success">$${subtotal.toLocaleString()}</div>
-            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition duration-200 hover:bg-danger hover:text-white" aria-label="Eliminar ${esc(item.nombre)} del carrito">
+            <button onclick="eliminarDelCarrito(${item.id}, '${item.fecha || ''}')" class="inline-flex items-center justify-center gap-2 rounded-full border-2 border-danger/40 px-3 py-1.5 text-danger transition hover:bg-danger hover:text-white" aria-label="Eliminar ${esc(item.nombre)} del carrito">
               <i class="fas fa-trash"></i>
             </button>
           </div>
