@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+{{HEAD}}
+<body>
+  <div class="overlay">
+    <div class="flex min-h-screen items-center justify-center px-4 py-6">
+      <div class="w-full max-w-xl">
+        <div class="text-center">
+          <div class="page-kicker mb-4">
+            <div class="hero-mark">
+              <i class="fas fa-paw fa-2x"></i>
+            </div>
+            <span class="mb-3 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur">
+              <i class="fas fa-paw"></i>Pet shop &amp; servicios
+            </span>
+            <h1 class="mb-2 text-5xl font-bold sm:text-6xl">Mundo Pets</h1>
+            <p class="lead mb-0">Cuidado profesional para tu mascota</p>
+          </div>
+
+          <div class="glass-card rounded-card p-5 sm:p-8">
+            <h2 class="mb-2 text-xl font-bold text-brand">Bienvenido</h2>
+            <p class="mb-6 text-muted">
+              Accede a tu cuenta para ver el catálogo, servicios y beneficios.
+            </p>
+
+            <div class="flex flex-col gap-3">
+              <button onclick="location.href='login.html'" class="btn-brand px-6 py-3 text-base">
+                <i class="fas fa-sign-in-alt"></i> Iniciar sesión
+              </button>
+              <button onclick="location.href='register.html'" class="btn-brand-outline px-6 py-3 text-base">
+                <i class="fas fa-user-plus"></i> Crear cuenta
+              </button>
+            </div>
+
+            <div class="mt-8 grid grid-cols-3 gap-3">
+              <div>
+                <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-primary text-white">
+                  <i class="fas fa-paw"></i>
+                </div>
+                <p class="mb-0 text-sm text-muted">Servicios</p>
+              </div>
+              <div>
+                <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-primary text-white">
+                  <i class="fas fa-shield-alt"></i>
+                </div>
+                <p class="mb-0 text-sm text-muted">Confianza</p>
+              </div>
+              <div>
+                <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-primary text-white">
+                  <i class="fas fa-heart"></i>
+                </div>
+                <p class="mb-0 text-sm text-muted">Cuidado</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card mt-4 rounded-card p-4">
+            <p class="mb-3 text-center text-xs uppercase tracking-widest text-muted">Contacto</p>
+            {{CONTACT}}
+          </div>
+
+          <p class="mt-4 mb-0 text-sm text-white/85">© 2026 Mundo Pets</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/alpine.min.js?v={{V_ALPINE}}"></script>
+  <script src="script.js?v={{V_JS}}"></script>
+</body>
+</html>

@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "build:css": "tailwindcss -i ./src/input.css -o ./dist/tailwind.css --minify",
-    "watch:css": "tailwindcss -i ./src/input.css -o ./dist/tailwind.css --watch"
+    "watch:css": "tailwindcss -i ./src/input.css -o ./dist/tailwind.css --watch",
+    "build:pages": "node build-pages.mjs",
+    "build": "npm run build:css && node build-pages.mjs"
   },
   "devDependencies": {
     "tailwindcss": "^4.0.0",
