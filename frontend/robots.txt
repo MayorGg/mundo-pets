@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /dashboard.html
+Disallow: /login.html
+Disallow: /register.html
+
+# Reemplaza TU_DOMINIO por tu dominio real al desplegar
+Sitemap: https://TU_DOMINIO/sitemap.xml

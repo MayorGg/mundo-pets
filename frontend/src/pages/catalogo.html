@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+{{HEAD}}
+<body>
+  <div class="overlay">
+    <div class="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6">
+      <!-- Header -->
+      <nav class="mb-4 flex items-center justify-between gap-3 rounded-card bg-gradient-primary px-4 py-3 shadow-card sm:px-5 sm:py-4" aria-label="Navegación principal">
+        <a class="flex items-center gap-3 no-underline" href="index.html">
+          <i class="fas fa-paw fa-2x text-warn"></i>
+          <div>
+            <span class="block brand-title">Mundo Pets</span>
+            <small class="brand-subtitle">Tu tienda de confianza</small>
+          </div>
+        </a>
+        <div class="flex items-center gap-2">
+          <a href="login.html" class="btn-brand px-4 py-2.5 no-underline">
+            <i class="fas fa-sign-in-alt mr-2"></i><span class="hidden sm:inline">Iniciar sesión</span>
+          </a>
+        </div>
+      </nav>
+
+      <!-- Hero -->
+      <div class="bg-gradient-primary relative mb-4 overflow-hidden rounded-card px-6 py-7 shadow-card sm:px-8">
+        <i class="fas fa-paw absolute -right-3 -top-4 text-8xl text-white/10" aria-hidden="true"></i>
+        <div class="relative">
+          <span class="mb-3 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-white/90">
+            <i class="fas fa-store"></i>Catálogo público
+          </span>
+          <h1 class="mb-2 text-3xl font-bold text-white sm:text-4xl">Nuestros productos y servicios</h1>
+          <p class="mb-0 max-w-2xl text-white/85">Explora el catálogo completo. Para comprar o reservar, inicia sesión con tu cuenta.</p>
+        </div>
+      </div>
+
+      <!-- Filtros por categoría -->
+      <div id="catalogoFiltros" class="mb-3 flex flex-wrap justify-center gap-2" role="group" aria-label="Filtrar por categoría"></div>
+
+      <!-- Grid de productos -->
+      <div id="catalogoGrid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"></div>
+
+      <!-- CTA -->
+      <div class="glass-card mt-4 mb-4 rounded-card p-5 text-center">
+        <p class="mb-3 text-muted">¿Listo para comprar? Inicia sesión o crea tu cuenta.</p>
+        <div class="flex flex-wrap justify-center gap-2">
+          <a href="login.html" class="btn-brand px-5 py-2.5 no-underline"><i class="fas fa-sign-in-alt mr-2"></i>Iniciar sesión</a>
+          <a href="register.html" class="btn-brand-outline px-5 py-2.5 no-underline"><i class="fas fa-user-plus mr-2"></i>Crear cuenta</a>
+        </div>
+      </div>
+
+      <p class="mb-0 text-center text-sm text-white/85">© 2026 Mundo Pets</p>
+    </div>
+  </div>
+
+  <script src="vendor/alpine.min.js?v={{V_ALPINE}}"></script>
+  <script src="catalogo.js?v={{V_CATALOGO}}"></script>
+</body>
+</html>

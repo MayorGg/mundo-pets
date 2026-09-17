@@ -1,0 +1,16 @@
+{
+  "name": "Mundo Pets",
+  "short_name": "Mundo Pets",
+  "description": "Pet shop y servicios para el cuidado de tu mascota: alimentos, medicamentos, peluquería y guardería.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#e8f5f4",
+  "theme_color": "#0e7c7b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
