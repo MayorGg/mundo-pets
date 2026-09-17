@@ -731,6 +731,7 @@ function actualizarContadorCarrito() {
   const counter = document.getElementById('cart-count');
   if (!counter) return;
   counter.textContent = totalItems;
+  counter.style.display = totalItems > 0 ? 'flex' : 'none';
   counter.classList.remove('cart-bump');
   void counter.offsetWidth;
   counter.classList.add('cart-bump');
