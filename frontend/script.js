@@ -294,12 +294,14 @@ function renderCalendarioServicio() {
     const pasada = iso < fechaHoyBogota();
     const disponible = esFechaDisponible(iso);
     const seleccionada = fechaServicioSeleccionada === iso;
+    const esHoy = iso === fechaHoyBogota();
     const clases = [
       'cal-cell',
       disponible ? 'cal-available' : 'cal-disabled',
       festivo ? 'cal-holiday' : '',
       domingo ? 'cal-sunday' : '',
       pasada ? 'cal-past' : '',
+      esHoy ? 'cal-today' : '',
       seleccionada ? 'cal-selected' : ''
     ].filter(Boolean).join(' ');
 

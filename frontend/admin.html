@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="dist/tailwind.css?v=9" />
+  <link rel="stylesheet" href="dist/tailwind.css?v=10" />
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
@@ -71,6 +71,7 @@
         <section id="seccion-resumen" class="seccion">
           <div class="glass-card rounded-card p-5 sm:p-6">
             <div class="mb-4">
+              <p class="section-kicker">Panel de administración</p>
               <h1 class="text-2xl font-bold text-brand">Resumen</h1>
               <p class="text-muted">Visión general de tu tienda</p>
             </div>
@@ -119,6 +120,7 @@
           <div class="glass-card rounded-card p-5 sm:p-6">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
+                <p class="section-kicker">Catálogo</p>
                 <h1 class="text-2xl font-bold text-brand">Productos</h1>
                 <p class="text-muted">Administra el catálogo de tu tienda</p>
               </div>
@@ -126,22 +128,22 @@
                 <i class="fas fa-plus mr-2"></i>Nuevo Producto
               </button>
             </div>
-            <div class="overflow-hidden rounded-card">
+            <div class="data-table-wrap">
               <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                  <thead class="bg-brand-soft">
+                <table class="data-table">
+                  <thead>
                     <tr>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">ID</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Imagen</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Nombre</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Categoría</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Precio</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Fecha</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Estado</th>
-                      <th class="px-4 py-3 text-right font-semibold text-brand-dark">Acciones</th>
+                      <th>ID</th>
+                      <th>Imagen</th>
+                      <th>Nombre</th>
+                      <th>Categoría</th>
+                      <th>Precio</th>
+                      <th>Fecha</th>
+                      <th>Estado</th>
+                      <th class="text-right">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody id="tbody-productos" class="divide-y divide-gray-100"></tbody>
+                  <tbody id="tbody-productos"></tbody>
                 </table>
               </div>
             </div>
@@ -154,6 +156,7 @@
           <div class="glass-card rounded-card p-5 sm:p-6">
             <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
+                <p class="section-kicker">Catálogo</p>
                 <h1 class="text-2xl font-bold text-brand">Categorías</h1>
                 <p class="text-muted">Organiza tu catálogo por categorías</p>
               </div>
@@ -161,21 +164,21 @@
                 <i class="fas fa-plus mr-2"></i>Nueva Categoría
               </button>
             </div>
-            <div class="overflow-hidden rounded-card">
+            <div class="data-table-wrap">
               <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                  <thead class="bg-brand-soft">
+                <table class="data-table">
+                  <thead>
                     <tr>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">ID</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Nombre</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Descripción</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Icono</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Color</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Productos</th>
-                      <th class="px-4 py-3 text-right font-semibold text-brand-dark">Acciones</th>
+                      <th>ID</th>
+                      <th>Nombre</th>
+                      <th>Descripción</th>
+                      <th>Icono</th>
+                      <th>Color</th>
+                      <th>Productos</th>
+                      <th class="text-right">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody id="tbody-categorias" class="divide-y divide-gray-100"></tbody>
+                  <tbody id="tbody-categorias"></tbody>
                 </table>
               </div>
             </div>
@@ -186,23 +189,24 @@
         <section id="seccion-usuarios" class="seccion hidden">
           <div class="glass-card rounded-card p-5 sm:p-6">
             <div class="mb-4">
+              <p class="section-kicker">Cuentas</p>
               <h1 class="text-2xl font-bold text-brand">Usuarios</h1>
               <p class="text-muted">Usuarios registrados y sus permisos de acceso</p>
             </div>
-            <div class="overflow-hidden rounded-card">
+            <div class="data-table-wrap">
               <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                  <thead class="bg-brand-soft">
+                <table class="data-table">
+                  <thead>
                     <tr>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">ID</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Usuario</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Email</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Rol</th>
-                      <th class="px-4 py-3 font-semibold text-brand-dark">Registro</th>
-                      <th class="px-4 py-3 text-right font-semibold text-brand-dark">Acciones</th>
+                      <th>ID</th>
+                      <th>Usuario</th>
+                      <th>Email</th>
+                      <th>Rol</th>
+                      <th>Registro</th>
+                      <th class="text-right">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody id="tbody-usuarios" class="divide-y divide-gray-100"></tbody>
+                  <tbody id="tbody-usuarios"></tbody>
                 </table>
               </div>
             </div>
@@ -372,6 +376,6 @@
   </div>
 
   <script src="vendor/alpine.min.js"></script>
-  <script src="admin.js?v=9"></script>
+  <script src="admin.js?v=10"></script>
 </body>
 </html>

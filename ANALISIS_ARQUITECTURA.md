@@ -849,3 +849,24 @@ Objetivo: reducir la complejidad de estado en el frontend sin introducir un bund
 - Navegador: el modal de carrito abre y cierra con Escape, el de productos renderiza las 4 tarjetas y agrega al carrito (badge `1`), y los modales del admin abren/cierran — 0 errores de consola.
 - Se corrigió un `TypeError` en el navegador real: `Cannot set properties of undefined (setting 'cartCount')` al inicializar, causado por usar `Alpine.store('ui')` antes de que el store existiera.
 - Nota del entorno de pruebas: el harness headless no ejecuta scripts `defer` de terceros y retrasa las peticiones tempranas de la página; por eso Alpine se vendió y cargó sin `defer`, y la verificación del catálogo requirió esperar a que la carga de la API completara.
+
+## 24. Pulido visual (identidad intacta)
+
+Objetivo: mejorar la consistencia y el acabado visual sin cambiar la identidad: mismos colores (teal/dorado), mismas fuentes (Outfit + Playfair), misma curva de transición (220 ms), mismo `radius-card` y sombras.
+
+### Cambios (`frontend/src/input.css` + páginas)
+
+- **Tokens:** `--color-line` / `--color-line-strong` (bordes teñidos de brand) y `--shadow-btn`.
+- **Tablas (admin):** nuevas clases `.data-table-wrap` y `.data-table` (encabezados uppercase pequeños, separadores con `color-line`, hover de fila `brand-soft/50`). Se reemplazó el marcado plano de las 3 tablas y se quitaron las clases de celda inline de `admin.js`. Se elimina el gris de Tailwind que se colaba.
+- **Badges:** sistema `.badge` + variantes `badge-success/-danger/-info/-warn/-muted/-brand`, usado en las tablas del admin (`admin.js`).
+- **Botones:** estado `:active` (escala 0.97) en `btn-brand`, `btn-brand-success`, `btn-brand-outline`, `btn-social` y `payment-btn`; el hover de `btn-brand` conserva el degradado (overlay de oscurecido) en vez de aplanarse, con sombra `--shadow-btn`.
+- **Calendario:** marcador del día de hoy (`.cal-today`, anillo teal) en `renderCalendarioServicio`.
+- **Glass-card:** highlight superior sutil (`inset 0 1px 0 rgba(255,255,255,.7)`), mismo blur.
+- **Kickers de sección:** `.section-kicker` (etiqueta uppercase pequeña) sobre los títulos del panel admin.
+- **Navbar del dashboard:** fija al hacer scroll (`sticky top-3 z-40`) para mantener el carrito visible.
+- **Landing:** título `text-5xl sm:text-6xl`, chip "Pet shop & servicios" y los atributos con iconos en círculo translúcido (más presencia).
+
+### Verificación
+
+- `npm --prefix frontend run build:css` OK; `node --check` de `script.js` y `admin.js` OK.
+- Navegador: título 60 px + chip, navbar `position: sticky`, tablas `table.data-table` con encabezados y badges renderizados, 0 errores de consola.

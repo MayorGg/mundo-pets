@@ -19,6 +19,9 @@
 
   --shadow-card: 0 18px 50px rgba(10, 50, 52, 0.18);
   --shadow-card-hover: 0 24px 56px rgba(10, 50, 52, 0.24);
+  --shadow-btn: 0 10px 24px rgba(10, 83, 84, 0.32);
+  --color-line: rgba(14, 124, 123, 0.14);
+  --color-line-strong: rgba(14, 124, 123, 0.30);
   --motion-standard: 220ms;
   --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -100,7 +103,7 @@
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     border: 1px solid rgba(255, 255, 255, 0.55);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   }
 
   .bg-gradient-primary {
@@ -163,11 +166,15 @@
   }
 
   .btn-brand:hover {
-    background-color: var(--color-brand-dark);
-    background-image: none;
+    background-image: linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.12)), linear-gradient(135deg, #0e7c7b 0%, #0a5354 100%);
     color: #fff;
     transform: translateY(-2px);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-btn);
+  }
+
+  .btn-brand:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 4px 12px rgba(10, 83, 84, 0.28);
   }
 
   .btn-brand-success {
@@ -177,9 +184,15 @@
   }
 
   .btn-brand-success:hover {
+    background-image: linear-gradient(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.12)), linear-gradient(135deg, #1a8a62 0%, #0e7c7b 100%);
     transform: translateY(-2px);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-btn);
     color: #fff;
+  }
+
+  .btn-brand-success:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 4px 12px rgba(10, 83, 84, 0.28);
   }
 
   .btn-brand-outline {
@@ -193,6 +206,12 @@
     border-color: var(--color-brand);
     color: #fff;
     transform: translateY(-2px);
+    box-shadow: var(--shadow-btn);
+  }
+
+  .btn-brand-outline:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: none;
   }
 
   .btn-brand:disabled,
@@ -217,6 +236,11 @@
     color: #fff;
     transform: translateY(-2px);
     box-shadow: var(--shadow-card);
+  }
+
+  .btn-social:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: none;
   }
 
   .hero-mark {
@@ -331,6 +355,100 @@
     padding: 0.25rem 0.5rem;
     border-radius: 0.5rem;
     background: var(--color-brand-soft);
+  }
+
+  /* Etiqueta pequeña sobre los títulos de sección */
+  .section-kicker {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-brand);
+    opacity: 0.85;
+    margin-bottom: 0.25rem;
+  }
+
+  /* Sistema de badges/pills (tinte del propio color, misma forma en toda la app) */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  .badge-success {
+    background: rgba(26, 138, 98, 0.12);
+    color: var(--color-success);
+  }
+
+  .badge-danger {
+    background: rgba(180, 35, 24, 0.1);
+    color: var(--color-danger);
+  }
+
+  .badge-info {
+    background: rgba(42, 143, 154, 0.12);
+    color: var(--color-info);
+  }
+
+  .badge-warn {
+    background: rgba(201, 162, 39, 0.16);
+    color: var(--color-warn-dark);
+  }
+
+  .badge-muted {
+    background: rgba(74, 100, 104, 0.1);
+    color: var(--color-muted);
+  }
+
+  .badge-brand {
+    background-image: linear-gradient(135deg, #0e7c7b 0%, #0a5354 100%);
+    color: #fff;
+  }
+
+  /* Tablas de datos (admin) */
+  .data-table-wrap {
+    overflow: hidden;
+    border-radius: var(--radius-card);
+    border: 1px solid var(--color-line);
+  }
+
+  .data-table {
+    width: 100%;
+    text-align: left;
+    font-size: 0.875rem;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .data-table thead th {
+    background: var(--color-brand-soft);
+    color: var(--color-brand-dark);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    padding: 0.8rem 1rem;
+    white-space: nowrap;
+  }
+
+  .data-table tbody td {
+    padding: 0.8rem 1rem;
+    border-top: 1px solid var(--color-line);
+    vertical-align: middle;
+  }
+
+  .data-table tbody tr {
+    transition: background-color var(--motion-standard) var(--motion-ease);
+  }
+
+  .data-table tbody tr:hover {
+    background: rgba(232, 245, 244, 0.5);
   }
 
   .product-card {
@@ -519,6 +637,14 @@
     background-image: linear-gradient(135deg, #0e7c7b 0%, #0a5354 100%) !important;
     color: #fff !important;
     border-color: var(--color-brand-dark);
+  }
+
+  .cal-today {
+    box-shadow: inset 0 0 0 2px var(--color-brand);
+  }
+
+  .cal-selected.cal-today {
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
   }
 
   .cal-dot {

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="dist/tailwind.css?v=9" />
+  <link rel="stylesheet" href="dist/tailwind.css?v=10" />
   </head>
 <body>
   <div class="overlay">
@@ -20,7 +20,10 @@
             <div class="hero-mark">
               <i class="fas fa-paw fa-2x"></i>
             </div>
-            <h1 class="mb-2 text-4xl font-bold">Mundo Pets</h1>
+            <span class="mb-3 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur">
+              <i class="fas fa-paw"></i>Pet shop &amp; servicios
+            </span>
+            <h1 class="mb-2 text-5xl font-bold sm:text-6xl">Mundo Pets</h1>
             <p class="lead mb-0">Cuidado profesional para tu mascota</p>
           </div>
 
@@ -41,15 +44,21 @@
 
             <div class="mt-8 grid grid-cols-3 gap-3">
               <div>
-                <i class="fas fa-paw mb-2 text-2xl text-brand"></i>
+                <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur">
+                  <i class="fas fa-paw"></i>
+                </div>
                 <p class="mb-0 text-sm text-muted">Servicios</p>
               </div>
               <div>
-                <i class="fas fa-shield-alt mb-2 text-2xl text-brand"></i>
+                <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur">
+                  <i class="fas fa-shield-alt"></i>
+                </div>
                 <p class="mb-0 text-sm text-muted">Confianza</p>
               </div>
               <div>
-                <i class="fas fa-heart mb-2 text-2xl text-brand"></i>
+                <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur">
+                  <i class="fas fa-heart"></i>
+                </div>
                 <p class="mb-0 text-sm text-muted">Cuidado</p>
               </div>
             </div>
@@ -83,6 +92,6 @@
   </div>
 
   <script src="vendor/alpine.min.js"></script>
-  <script src="script.js?v=9"></script>
+  <script src="script.js?v=10"></script>
 </body>
 </html>

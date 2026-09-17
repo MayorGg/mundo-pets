@@ -13,7 +13,7 @@ let productoImagenFile = null;
 function renderAdminTableSkeleton(columnas, filas = 4) {
   return Array.from({ length: filas }, () => `
     <tr aria-hidden="true">
-      ${Array.from({ length: columnas }, () => '<td class="px-4 py-3"><div class="skeleton skeleton-line w-full"></div></td>').join('')}
+      ${Array.from({ length: columnas }, () => '<td><div class="skeleton skeleton-line w-full"></div></td>').join('')}
     </tr>
   `).join('');
 }
@@ -227,27 +227,27 @@ function renderPaginacion(tipo) {
 function renderProductos() {
   const tbody = document.getElementById('tbody-productos');
   if (!productosAdmin.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-muted">No hay productos. Crea uno con "Nuevo Producto".</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-muted">No hay productos. Crea uno con "Nuevo Producto".</td></tr>`;
     return;
   }
   tbody.innerHTML = productosAdmin.map(p => `
-    <tr class="transition hover:bg-brand-soft/40">
-      <td class="px-4 py-3 text-muted">${p.id}</td>
-      <td class="px-4 py-3">
+    <tr>
+      <td class="text-muted">${p.id}</td>
+      <td>
         ${p.imagen
           ? `<img src="${esc(p.imagen)}" alt="${esc(p.nombre)}" loading="lazy" class="h-10 w-10 rounded-lg object-cover" onerror="this.remove()">`
           : '<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-soft text-brand"><i class="fas fa-box"></i></div>'}
       </td>
-      <td class="px-4 py-3 font-semibold text-ink">${esc(p.nombre)}</td>
-      <td class="px-4 py-3 text-muted">${esc(p.categoria)}</td>
-      <td class="px-4 py-3 font-semibold text-success">$${Number(p.precio).toLocaleString()}</td>
-      <td class="px-4 py-3">${p.requiere_fecha
-        ? '<span class="rounded-full bg-info/10 px-2.5 py-1 text-xs font-semibold text-info">Fecha</span>'
-        : '<span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-muted">No</span>'}</td>
-      <td class="px-4 py-3">${p.activo
-        ? '<span class="rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">Activo</span>'
-        : '<span class="rounded-full bg-danger/10 px-2.5 py-1 text-xs font-semibold text-danger">Inactivo</span>'}</td>
-      <td class="px-4 py-3">
+      <td class="font-semibold text-ink">${esc(p.nombre)}</td>
+      <td class="text-muted">${esc(p.categoria)}</td>
+      <td class="font-semibold text-success">$${Number(p.precio).toLocaleString()}</td>
+      <td>${p.requiere_fecha
+        ? '<span class="badge badge-info">Fecha</span>'
+        : '<span class="badge badge-muted">No</span>'}</td>
+      <td>${p.activo
+        ? '<span class="badge badge-success">Activo</span>'
+        : '<span class="badge badge-danger">Inactivo</span>'}</td>
+      <td>
         <div class="flex justify-end gap-2">
           <button type="button" onclick="abrirModalProducto(${p.id})" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Editar ${esc(p.nombre)}">
             <i class="fas fa-pen"></i>
@@ -436,7 +436,7 @@ function poblarSelectCategorias() {
 function renderCategorias() {
   const tbody = document.getElementById('tbody-categorias');
   if (!categoriasAdmin.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-muted">No hay categorías. Crea una con "Nueva Categoría".</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-muted">No hay categorías. Crea una con "Nueva Categoría".</td></tr>`;
     return;
   }
   const colorMap = {
@@ -456,14 +456,14 @@ function renderCategorias() {
     muted: 'Gris'
   };
   tbody.innerHTML = categoriasAdmin.map(c => `
-    <tr class="transition hover:bg-brand-soft/40">
-      <td class="px-4 py-3 text-muted">${c.id}</td>
-      <td class="px-4 py-3 font-semibold text-ink">${esc(c.nombre)}</td>
-      <td class="px-4 py-3 text-muted">${esc(c.descripcion) || '–'}</td>
-      <td class="px-4 py-3 text-center"><i class="fas ${esc(c.icono)} text-brand"></i></td>
-      <td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-semibold ${colorMap[c.color] || colorMap.brand}">${colorLabel[c.color] || esc(c.color)}</span></td>
-      <td class="px-4 py-3 text-center font-semibold ${Number(c.productos) > 0 ? 'text-success' : 'text-muted'}">${c.productos}</td>
-      <td class="px-4 py-3">
+    <tr>
+      <td class="text-muted">${c.id}</td>
+      <td class="font-semibold text-ink">${esc(c.nombre)}</td>
+      <td class="text-muted">${esc(c.descripcion) || '–'}</td>
+      <td class="text-center"><i class="fas ${esc(c.icono)} text-brand"></i></td>
+      <td><span class="badge ${colorMap[c.color] || colorMap.brand}">${colorLabel[c.color] || esc(c.color)}</span></td>
+      <td class="text-center font-semibold ${Number(c.productos) > 0 ? 'text-success' : 'text-muted'}">${c.productos}</td>
+      <td>
         <div class="flex justify-end gap-2">
           <button type="button" onclick="abrirModalCategoria(${c.id})" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Editar categoría ${esc(c.nombre)}">
             <i class="fas fa-pen"></i>
@@ -585,19 +585,19 @@ function renderUsuarios() {
   const tbody = document.getElementById('tbody-usuarios');
   const usuarios = usuariosAdmin;
   if (!usuarios.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-muted">No hay usuarios registrados.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-muted">No hay usuarios registrados.</td></tr>`;
     return;
   }
   tbody.innerHTML = usuarios.map(u => `
-    <tr class="transition hover:bg-brand-soft/40">
-      <td class="px-4 py-3 text-muted">${u.id}</td>
-      <td class="px-4 py-3 font-semibold text-ink">${esc(u.username)}</td>
-      <td class="px-4 py-3 text-muted">${esc(u.email)}</td>
-      <td class="px-4 py-3">${u.role === 'admin'
-        ? '<span class="rounded-full bg-gradient-primary px-2.5 py-1 text-xs font-semibold text-white">Admin</span>'
-        : '<span class="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand">Usuario</span>'}</td>
-      <td class="px-4 py-3 text-muted">${u.created_at ? new Date(u.created_at).toLocaleDateString('es-CO') : '–'}</td>
-      <td class="px-4 py-3">
+    <tr>
+      <td class="text-muted">${u.id}</td>
+      <td class="font-semibold text-ink">${esc(u.username)}</td>
+      <td class="text-muted">${esc(u.email)}</td>
+      <td>${u.role === 'admin'
+        ? '<span class="badge badge-brand">Admin</span>'
+        : '<span class="badge badge-info">Usuario</span>'}</td>
+      <td class="text-muted">${u.created_at ? new Date(u.created_at).toLocaleDateString('es-CO') : '–'}</td>
+      <td>
         <div class="flex justify-end gap-2">
           <button type="button" onclick="abrirModalUsuario(${u.id})" class="btn-brand-outline px-3 py-1.5 text-sm" aria-label="Editar permisos de ${esc(u.username)}" title="Cambiar permisos">
             <i class="fas fa-user-shield"></i>
