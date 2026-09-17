@@ -6,7 +6,8 @@ Mundo Pets es una aplicación web servida por un único proceso Node.js:
 
 - `backend/server.js` es el entrypoint. Express sirve `frontend/`, `img/` y la API REST bajo `/api`.
 - El backend usa CommonJS, MySQL mediante `mysql2/promise`, JWT, bcrypt, Helmet, CORS, rate limiting, Multer y Sharp.
-- El frontend está compuesto por páginas HTML independientes y JavaScript vanilla; no usa React, TypeScript, Vue, Angular ni bundler.
+- El frontend está compuesto por páginas HTML y JavaScript vanilla; no usa React, TypeScript, Vue, Angular ni bundler de módulos.
+- Las páginas se **generan en build**: `frontend/src/pages/*.html` + `frontend/partials/*.html` se componen con `frontend/build-pages.mjs` y se escriben en `frontend/*.html` (archivos generados).
 - Tailwind CSS se compila desde `frontend/src/input.css` hacia `frontend/dist/tailwind.css`.
 - La arquitectura detallada y el inventario funcional están en [ANALISIS_ARQUITECTURA.md](ANALISIS_ARQUITECTURA.md).
 
@@ -17,26 +18,31 @@ Ejecutar desde la raíz en PowerShell:
 ```powershell
 npm --prefix backend install
 npm --prefix frontend install
-npm --prefix frontend run build:css
+npm --prefix frontend run build
 node backend/seed.js
 node backend/server.js
 ```
 
 El servidor usa `PORT` o `5000` por defecto y requiere MySQL accesible, normalmente en `localhost:3306`. La configuración local se toma de `backend/.env`; para producción se usa `NODE_ENV=production` y `backend/.env.production`. Nunca introduzcas secretos reales en el repositorio.
 
-Durante cambios de estilos, usa `npm --prefix frontend run watch:css` o vuelve a ejecutar `build:css`. Modifica `frontend/src/input.css`, no `frontend/dist/tailwind.css` manualmente.
+Durante cambios de estilos, usa `npm --prefix frontend run watch:css` o vuelve a ejecutar `build`. Modifica `frontend/src/input.css`, no `frontend/dist/tailwind.css` manualmente.
+
+Para cambios de interfaz, edita `frontend/src/pages/*.html` y `frontend/partials/*.html`, y luego ejecuta `npm --prefix frontend run build` (compila Tailwind y regenera las páginas). No edites `frontend/*.html` a mano: son archivos generados que el build sobrescribe.
 
 ## Validación
 
-No hay suite automatizada ni scripts `test` declarados. Como mínimo, después de cambios de JavaScript ejecuta:
+Existe una suite de tests del backend (Vitest) y un workflow de CI en `.github/workflows/ci.yml`. Antes de dar por cerrado un cambio ejecuta, según corresponda:
 
 ```powershell
-node --check backend/server.js
+npm --prefix backend run test
+npm --prefix backend run typecheck
+npm --prefix frontend run build
 node --check frontend/script.js
 node --check frontend/admin.js
+node --check frontend/catalogo.js
 ```
 
-Para validar cambios de CSS, ejecuta `npm --prefix frontend run build:css`. Si el cambio toca persistencia o autenticación, valida también con MySQL configurado y revisa los flujos afectados; el fallback de `backend/users.json` solo cubre registro e inicio de sesión, no catálogo, pedidos ni administración.
+Para validar cambios de CSS o de páginas usa `npm --prefix frontend run build` (compila Tailwind y regenera los HTML). Si el cambio toca persistencia o autenticación, valida también con MySQL configurado y revisa los flujos afectados; el fallback de `backend/users.json` solo cubre registro e inicio de sesión, no catálogo, pedidos ni administración.
 
 ## Límites de responsabilidad
 
@@ -52,7 +58,8 @@ Para validar cambios de CSS, ejecuta `npm --prefix frontend run build:css`. Si e
 
 - Respeta el estilo existente y evita reformatos masivos o refactorizaciones no relacionadas.
 - Para cambios de esquema o datos, revisa y mantén coherentes `backend/setup-db.sql` y `backend/seed.js`.
-- Para cambios de interfaz, actualiza las páginas o scripts correspondientes y recompila Tailwind. Los assets pueden llevar un parámetro `?v=...`; actualízalo cuando sea necesario para evitar caché del navegador.
+- Para cambios de interfaz, actualiza las páginas o scripts correspondientes y recompila con `npm --prefix frontend run build`. Edita `frontend/src/pages/` y `frontend/partials/`, nunca `frontend/*.html` (generados). El build estampa automáticamente `?v=<hash>` en los assets; no lo edites a mano.
+- Los assets de SEO (`frontend/manifest.json`, `robots.txt`, `sitemap.xml`) usan `TU_DOMINIO` como marcador en `robots.txt`/`sitemap.xml`; reemplázalo por el dominio real al desplegar.
 - Mantén la compatibilidad con el frontend servido por Express y con el modo de apertura directa mediante archivo, que usa `http://localhost:5000` como API.
 - Si agregas una dependencia, actualiza el `package.json` y el lockfile del subproyecto correcto (`backend/` o `frontend/`); no mezcles dependencias entre ambos.
 - Usa `deploy/DEPLOY.md`, `deploy/nginx-mundo-pets.conf`, `ecosystem.config.js` y `scripts/backup-db.ps1` como referencias para despliegue y operación, sin asumir que sus valores de ejemplo son configuración lista para producción.
@@ -64,6 +71,10 @@ Para validar cambios de CSS, ejecuta `npm --prefix frontend run build:css`. Si e
 - [backend/seed.js](backend/seed.js): creación/migración básica y datos iniciales.
 - [frontend/script.js](frontend/script.js): autenticación cliente, catálogo, carrito y dashboard.
 - [frontend/admin.js](frontend/admin.js): operaciones del panel administrativo.
+- [frontend/catalogo.js](frontend/catalogo.js): catálogo público (sin login) con JSON-LD.
+- [frontend/build-pages.mjs](frontend/build-pages.mjs): compone `frontend/*.html` desde `frontend/src/pages/` + `frontend/partials/` y estampa los hashes `?v=`.
+- [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md): tokens, componentes y guías del sistema de diseño.
+- [PLAN_PROFESIONALIZACION.md](PLAN_PROFESIONALIZACION.md): hoja de ruta y estado de las fases.
 - [deploy/DEPLOY.md](deploy/DEPLOY.md): procedimiento de despliegue.
 
 El `README.md` actual no contiene documentación operativa útil; no lo uses como fuente de comandos o arquitectura hasta que se actualice.

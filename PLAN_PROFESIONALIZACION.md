@@ -145,3 +145,22 @@ Cerrar el punto pendiente de HTTPS y preparar la caché para escalar horizontalm
 - Mantener el mismo formato de "Fase" y de verificación que `ANALISIS_ARQUITECTURA.md`, para que este plan quede documentado con la misma convención que el resto del proyecto.
 - Actualizar `ANALISIS_ARQUITECTURA.md` al cerrar cada fase, igual que se hizo con las fases anteriores.
 - Ninguna fase de este plan requiere tocar `frontend/index.html`, `login.html` o `register.html`, ni cambiar el framework backend.
+
+---
+
+## 8. Profesionalización del frontend (Fases A-D)
+
+> **Estado (17-sep-2026):** fases A, B y C completadas; D (documentación) en curso.
+
+Track paralelo al plan anterior (fases 1-5). No cambia el framework ni la identidad visual: refuerza el pipeline del frontend, el sistema de diseño y el SEO.
+
+| Fase | Nombre | Estado |
+|---|---|---|
+| A | Composición de páginas en build + cache-busting automático | Completada |
+| B | Sistema de diseño y transiciones unificadas (`DESIGN_SYSTEM.md`) | Completada |
+| C | SEO (manifest, iconos, robots, sitemap, OG/JSON-LD) + catálogo público | Completada |
+| D | Documentación (`AGENTS.md`, `ANALISIS_ARQUITECTURA.md`, este plan) | En curso |
+
+> Nota: a partir de la Fase A, `frontend/*.html` son **generados** desde `frontend/src/pages/` + `frontend/partials/` con `npm --prefix frontend run build`; no se editan a mano.
+
+Detalle técnico en las secciones 25-27 de `ANALISIS_ARQUITECTURA.md`.

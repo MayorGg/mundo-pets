@@ -1,7 +1,7 @@
 # Mundo Pets: análisis de arquitectura y funcionamiento
 
 > **Fecha del análisis:** 2 de septiembre de 2026  
-> **Última actualización:** 8 de septiembre de 2026 — Fases 0-3 completadas + Fase 4 Experiencia (Alpine.js vendido local, modales con `x-show`/`x-cloak`, store perezoso, cierre con Escape robusto y fallback sin Alpine).
+> **Última actualización:** 17 de septiembre de 2026 — Fases A-C de profesionalización del frontend (composición de páginas en build con cache-busting, sistema de diseño y transiciones unificadas, SEO y catálogo público), además de las Fases 0-4 y el pulido visual.
 > **Alcance:** revisión estática del repositorio actual. Este documento describe lo que está implementado en el código, no una arquitectura objetivo.
 
 ## 1. Resumen ejecutivo
@@ -37,9 +37,12 @@ mundo pets/
 ├── README.md
 ├── LICENSE
 ├── ANALISIS_ARQUITECTURA.md
+├── AGENTS.md             (instrucciones para agentes)
+├── DESIGN_SYSTEM.md      (tokens y componentes del sistema de diseño)
+├── PLAN_PROFESIONALIZACION.md
 ├── ecosystem.config.js   (PM2)
 ├── .github/
-│   └── workflows/ci.yml  (CI: typecheck + tests + build:css)
+│   └── workflows/ci.yml  (CI: typecheck + tests + build)
 ├── backend/
 │   ├── package.json
 │   ├── server.js
@@ -59,16 +62,26 @@ mundo pets/
 │   ├── .env.production    (plantilla; no versionado en uso real)
 │   └── .env              (no versionado)
 ├── frontend/
-│   ├── index.html
-│   ├── login.html
-│   ├── register.html
-│   ├── dashboard.html
-│   ├── admin.html
-│   ├── favicon.svg
+│   ├── index.html          (generado)
+│   ├── catalogo.html       (generado)
+│   ├── login.html          (generado)
+│   ├── register.html       (generado)
+│   ├── dashboard.html      (generado)
+│   ├── admin.html          (generado)
+│   ├── build-pages.mjs     (compone las páginas y estampa ?v=<hash>)
+│   ├── src/pages/          (fuente: index, catalogo, login, register, dashboard, admin)
+│   ├── partials/           (head.html, contact.html)
 │   ├── script.js
 │   ├── admin.js
+│   ├── catalogo.js
+│   ├── vendor/alpine.min.js
+│   ├── favicon.svg
+│   ├── apple-touch-icon.png / icon-192.png / icon-512.png
+│   ├── manifest.json
+│   ├── robots.txt
+│   ├── sitemap.xml
 │   ├── src/input.css
-│   └── dist/tailwind.css
+│   └── dist/tailwind.css   (generado)
 ├── scripts/
 │   └── backup-db.ps1
 ├── deploy/
@@ -98,6 +111,14 @@ mundo pets/
 | [frontend/register.html](frontend/register.html) | Formulario de registro |
 | [frontend/dashboard.html](frontend/dashboard.html) | Catálogo del usuario, carrito y checkout |
 | [frontend/admin.html](frontend/admin.html) | Interfaz del panel administrativo |
+| [frontend/catalogo.html](frontend/catalogo.html) | Catálogo público (sin login) con filtros por categoría y JSON-LD `ItemList` |
+| [frontend/catalogo.js](frontend/catalogo.js) | Consumo público de `/api/products`, render de tarjetas y JSON-LD |
+| [frontend/build-pages.mjs](frontend/build-pages.mjs) | Compone `frontend/*.html` desde `frontend/src/pages/` + `frontend/partials/` y estampa `?v=<hash>` |
+| [frontend/src/pages/](frontend/src/pages/) | Fuente de las páginas HTML (index, catalogo, login, register, dashboard, admin) |
+| [frontend/partials/](frontend/partials/) | Fragmentos compartidos: `head.html` (meta/CSS) y `contact.html` (redes) |
+| [frontend/manifest.json](frontend/manifest.json) | Manifest PWA (nombre, color de tema e iconos) |
+| [frontend/robots.txt](frontend/robots.txt) | Directrices para rastreadores; bloquea las páginas privadas |
+| [frontend/sitemap.xml](frontend/sitemap.xml) | Sitemap con las páginas públicas (index y catálogo) |
 | [frontend/script.js](frontend/script.js) | Estado y comportamiento del dashboard, autenticación cliente, catálogo, calendario y carrito |
 | [frontend/admin.js](frontend/admin.js) | Consumo de API administrativa, tablas, formularios y modales CRUD |
 | [frontend/src/input.css](frontend/src/input.css) | Fuente CSS de Tailwind y estilos propios |
@@ -107,7 +128,7 @@ mundo pets/
 | [deploy/DEPLOY.md](deploy/DEPLOY.md) | Guía de despliegue en producción |
 | [img/](img/) | Recursos gráficos servidos por Express |
 
-`frontend/dist/tailwind.css` se genera con el script `build:css` y está versionado en el repositorio. `backups/`, `logs/` y los `.env` reales no se versionan.
+`frontend/*.html` y `frontend/dist/tailwind.css` se **generan** con `npm --prefix frontend run build` (`build:css` + `build-pages.mjs`) y están versionados en el repositorio. `backups/`, `logs/` y los `.env` reales no se versionan.
 
 ## 3. Arquitectura de ejecución
 
@@ -213,7 +234,7 @@ Como alternativa, se puede ejecutar el esquema SQL de [backend/setup-db.sql](bac
 ```bash
 cd frontend
 npm install
-npm run build:css
+npm run build
 ```
 
 Durante el desarrollo se puede usar:
@@ -572,10 +593,10 @@ No se observan integraciones de backend con correo, almacenamiento de imágenes,
 
 ### Para modificar la interfaz
 
-- Las páginas HTML definen la estructura y cargan sus scripts.
+- Las páginas HTML se generan desde `frontend/src/pages/` + `frontend/partials/` (no se editan a mano).
 - `script.js` es compartido por las páginas públicas y el dashboard.
 - `admin.js` pertenece al panel administrativo.
-- Los estilos fuente están en `frontend/src/input.css`; tras modificarlos hay que ejecutar `npm run build:css`.
+- Los estilos fuente están en `frontend/src/input.css`; tras modificar páginas o estilos hay que ejecutar `npm run build`.
 - Las variables de estado global del dashboard no sobreviven a una recarga.
 
 ## 15. Recomendaciones priorizadas
@@ -794,7 +815,7 @@ Las pruebas crean datos con nombres únicos (`test_*`) y los limpian en `afterAl
 ### CI en GitHub Actions (`.github/workflows/ci.yml`)
 
 - **Backend:** servicio MySQL 8 (healthcheck), `npm ci`, `prisma generate` + `prisma db push` (crea el esquema sobre la BD vacía del job), `typecheck` (`tsc --noEmit`), `node backend/seed.js` (datos base) y `npm run test`. `seed.js` además crea la tabla `users` si no existe, para no depender de una BD pre-sembrada.
-- **Frontend:** `npm ci` y `npm run build:css` (valida que el CSS de Tailwind compile).
+- **Frontend:** `npm ci`, `npm run build` (compila Tailwind y genera las páginas) y `node --check` de `script.js`, `admin.js` y `catalogo.js`.
 - Se ejecuta en cada push (todas las ramas) y pull request.
 
 ### Verificación
@@ -870,3 +891,59 @@ Objetivo: mejorar la consistencia y el acabado visual sin cambiar la identidad: 
 
 - `npm --prefix frontend run build:css` OK; `node --check` de `script.js` y `admin.js` OK.
 - Navegador: título 60 px + chip, navbar `position: sticky`, tablas `table.data-table` con encabezados y badges renderizados, 0 errores de consola.
+
+## 25. Pipeline de páginas y cache-busting (Fase A)
+
+Objetivo: eliminar la duplicación de `<head>`, redes y bloques comunes entre páginas, y evitar caché obsoleta de assets, sin introducir plantillas de servidor (romperían la apertura directa por `file://`).
+
+### Cambios
+
+- **Fuente y generación:** `frontend/src/pages/*.html` (una por página) + `frontend/partials/head.html` y `frontend/partials/contact.html`. `frontend/build-pages.mjs` (Node, ESM) los compone y escribe `frontend/*.html`. `npm run build` = `build:css` + `build-pages.mjs`.
+- **Placeholders:** `{{HEAD}}`, `{{CONTACT}}`, `{{TITLE}}`, `{{PAGE_HEAD}}` y los hashes `{{V_CSS}}`, `{{V_JS}}`, `{{V_ADMIN}}`, `{{V_CATALOGO}}`, `{{V_ALPINE}}`. El script aborta si queda algún `{{...}}` sin resolver.
+- **Cache-busting automático:** cada asset se referencia como `?v=<sha1-8>` del contenido, recalculado en cada build. Se eliminó el `?v=` manual.
+- **Meta por página:** el manifiesto `PAGES` define el `<title>` y un bloque `head` por página (Open Graph en públicas, `robots noindex` + SweetAlert2 en privadas).
+
+### Verificación
+
+- Las 6 páginas se generan sin placeholders y responden 200; los assets con `?v=` responden 200.
+- Render y comportamiento idénticos a antes del cambio (solo cambia el versionado de assets).
+
+## 26. Sistema de diseño y transiciones (Fase B)
+
+Objetivo: documentar y unificar los tokens y componentes visuales sin alterar la identidad (colores teal/dorado, Outfit + Playfair, curva de 220 ms).
+
+### Cambios
+
+- Nuevo `DESIGN_SYSTEM.md` con paleta, tipografías, radios, sombras, componentes y guías de uso.
+- En `@theme` (`frontend/src/input.css`): `--default-transition-duration: 220ms` y `--default-transition-timing-function: var(--motion-ease)`, para que las utilidades `transition*` de Tailwind usen la curva de la marca.
+- Se retiraron 11 `duration-200` explícitos (páginas y `script.js`/`admin.js`) que duplicaban el valor por defecto.
+
+### Verificación
+
+- `npm --prefix frontend run build` OK; sin `duration-200` restantes.
+- En navegador, un elemento `.transition` computa `transition: 0.22s cubic-bezier(0.22, 1, 0.36, 1)`.
+
+## 27. SEO y catálogo público (Fase C)
+
+Objetivo: mejorar la indexación y aparición en buscadores y ofrecer una vista pública del catálogo sin login, con datos estructurados.
+
+### Cambios
+
+- **Iconos PWA:** `apple-touch-icon.png` (180), `icon-192.png` e `icon-512.png`, generados desde `favicon.svg` con Sharp.
+- **`frontend/manifest.json`:** nombre, `theme_color` `#0e7c7b`, `display: standalone` e iconos.
+- **`frontend/partials/head.html`:** añade `apple-touch-icon`, `theme-color` y `manifest` a todas las páginas.
+- **`frontend/robots.txt`:** permite el sitio público y bloquea `admin`, `dashboard`, `login`, `register`; incluye el sitemap (dominio vía marcador `TU_DOMINIO`).
+- **`frontend/sitemap.xml`:** incluye `index` y `catalogo` (marcador `TU_DOMINIO`).
+- **Meta por página en `build-pages.mjs`:** Open Graph en `index`/`catalogo` (más JSON-LD `PetStore`/`WebSite` en index) y `robots: noindex,nofollow` en las privadas.
+- **`frontend/src/pages/catalogo.html` + `frontend/catalogo.js`:** página pública que consume `GET /api/products?limit=200`, muestra tarjetas con filtro por categoría, CTA de login/registro e inyecta JSON-LD `ItemList` (`Product` + `Offer` en COP).
+- **Landing:** enlace "Ver catálogo sin cuenta" hacia `catalogo.html`.
+
+### Verificación
+
+- `catalogo.html`, `manifest.json`, `robots.txt`, `sitemap.xml`, los iconos y `catalogo.js` responden 200.
+- Navegador (catálogo público): 16 tarjetas, 5 filtros (Todas + 4 categorías), JSON-LD `ItemList` con 16 items, 0 errores de consola.
+- HTML generado: `og:title` en `index`/`catalogo`, `noindex` en las 4 privadas y `manifest` en las 6.
+
+### Pendiente
+
+- Reemplazar `TU_DOMINIO` por el dominio real en `robots.txt`/`sitemap.xml` al desplegar; los `og:image` usan ruta relativa (`/img/mundopets_mejorada.webp`).
