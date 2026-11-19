@@ -2,6 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
@@ -21,6 +22,7 @@ require('dotenv').config({ path: path.join(__dirname, ENV_FILE) });
 const app = express();
 
 // Headers de seguridad básicos (helmet) con CSP que no rompe el frontend vanilla
+const isProduction = NODE_ENV === 'production';
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -30,11 +32,17 @@ app.use(helmet({
       styleSrc: ["'self'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com', "'unsafe-inline'"],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com', 'data:'],
       imgSrc: ["'self'", 'data:'],
-      connectSrc: ["'self'", 'http://localhost:5000'],
+      connectSrc: ["'self'", 'http://localhost:5000', 'http://127.0.0.1:5000'],
       upgradeInsecureRequests: null
     }
   },
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  // En HTTP de la red local estas cabeceras hacen que Safari, Firefox y otros
+  // no abran la página o no carguen el fondo. En producción (HTTPS) se mantienen.
+  crossOriginOpenerPolicy: isProduction ? { policy: 'same-origin' } : false,
+  crossOriginResourcePolicy: isProduction ? { policy: 'same-origin' } : false,
+  originAgentCluster: isProduction,
+  strictTransportSecurity: isProduction
 }));
 
 // Compresión gzip/brotli de respuestas
@@ -45,13 +53,37 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5000')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+
+function isPrivateLanHost(hostname) {
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  return /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+function isOriginAllowed(origin) {
+  if (!origin || allowedOrigins.includes(origin)) return true;
+  if (NODE_ENV === 'production') return false;
+  try {
+    const url = new URL(origin);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && isPrivateLanHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 // Bloquear orígenes no permitidos antes de CORS (403 limpio)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (!origin || allowedOrigins.includes(origin)) return next();
+  if (isOriginAllowed(origin)) return next();
   return res.status(403).json({ error: 'Origen no permitido por CORS' });
 });
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(cors({
+  origin(origin, callback) {
+    callback(null, isOriginAllowed(origin));
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Secreto JWT desde variable de entorno (sin fallback fijo en el código)
@@ -219,6 +251,32 @@ function loginWithJson(identifier, password) {
 
   const role = user.role || 'user';
   return tokenResponse({ id: user.id, username: user.username, role });
+}
+
+const GUEST_USERNAME = 'invitado';
+const GUEST_EMAIL = 'invitado@mundopets.local';
+
+function guestLoginWithJson() {
+  const users = loadUsers();
+  let user = users.find(u => u.username === GUEST_USERNAME || u.email === GUEST_EMAIL);
+  if (!user) {
+    const nextId = users.reduce((max, u) => Math.max(max, Number(u.id) || 0), 0) + 1;
+    user = {
+      id: nextId,
+      username: GUEST_USERNAME,
+      email: GUEST_EMAIL,
+      password: bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10),
+      role: 'user'
+    };
+    users.push(user);
+    saveUsers(users);
+  }
+  return tokenResponse({
+    id: user.id,
+    username: user.username,
+    role: user.role || 'user',
+    message: 'Sesión de invitado iniciada'
+  });
 }
 
 // Configuración de conexión a MySQL (leída desde .env; hay fallback a users.json si no está disponible)
@@ -879,7 +937,62 @@ app.post('/api/login', loginLimiter, async (req, res) => {
   }
 });
 
-app.listen(Number(process.env.PORT || 5000), () => {
-  console.log(`Servidor corriendo en http://localhost:${process.env.PORT || 5000} (env: ${NODE_ENV})`);
+// Acceso como invitado: reutiliza o crea la cuenta compartida "invitado"
+app.post('/api/guest-login', loginLimiter, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    try {
+      const [rows] = await conn.query(
+        'SELECT id, username, role FROM users WHERE username = ? OR email = ? LIMIT 1',
+        [GUEST_USERNAME, GUEST_EMAIL]
+      );
+
+      let user = rows[0];
+      if (!user) {
+        const hash = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
+        const [insertResult] = await conn.query(
+          'INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)',
+          [GUEST_USERNAME, GUEST_EMAIL, hash, 'user']
+        );
+        user = { id: insertResult.insertId, username: GUEST_USERNAME, role: 'user' };
+      }
+
+      res.json(tokenResponse({
+        id: user.id,
+        username: user.username,
+        role: user.role || 'user',
+        message: 'Sesión de invitado iniciada'
+      }));
+    } finally {
+      conn.release();
+    }
+  } catch (err) {
+    console.error('MySQL no disponible, usando users.json (invitado):', err.message);
+    res.json(guestLoginWithJson());
+  }
+});
+
+const PORT = Number(process.env.PORT || 5000);
+const HOST = process.env.HOST || (NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
+
+function lanAddresses() {
+  const addresses = [];
+  for (const [name, entries] of Object.entries(os.networkInterfaces())) {
+    const virtual = /vEthernet|Hyper-V|WSL|Virtual|VMware|VirtualBox|Loopback/i.test(name);
+    for (const entry of entries || []) {
+      const isIpv4 = entry.family === 'IPv4' || entry.family === 4;
+      if (isIpv4 && !entry.internal && !virtual) addresses.push(entry.address);
+    }
+  }
+  return addresses;
+}
+
+app.listen(PORT, HOST, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT} (env: ${NODE_ENV})`);
+  if (HOST === '0.0.0.0' || HOST === '::') {
+    for (const address of lanAddresses()) {
+      console.log(`En el celular (misma Wi-Fi): http://${address}:${PORT}`);
+    }
+  }
 });
 

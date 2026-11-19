@@ -67,6 +67,11 @@ const MESES_ES = [
 const DIAS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const CATEGORIAS_CON_AGENDA = ['peluqueria', 'guarderia'];
 
+const PAGO_SEGUNDOS = 30 * 60;
+let pagoTimerId = null;
+let pagoDeadline = 0;
+let pagoEnCurso = false;
+
 let carrito = (() => {
   try {
     const guardado = JSON.parse(localStorage.getItem('mundoPetsCart') || '[]');
@@ -386,10 +391,31 @@ document.addEventListener('DOMContentLoaded', function() {
   // Si estamos en dashboard.html, verificar autenticación
   if (window.location.pathname.includes('dashboard.html')) {
     checkAuth();
+    actualizarBotonSalida();
     actualizarContadorCarrito();
     cargarProductos();
   }
 });
+
+function isGuestSession() {
+  return localStorage.getItem('isGuest') === '1';
+}
+
+function actualizarBotonSalida() {
+  const btn = document.getElementById('logoutBtn');
+  const label = document.getElementById('logoutBtnLabel');
+  if (!btn || !label) return;
+
+  if (isGuestSession()) {
+    label.textContent = 'Salir';
+    btn.setAttribute('aria-label', 'Salir');
+    btn.setAttribute('title', 'Salir');
+  } else {
+    label.textContent = 'Cerrar Sesión';
+    btn.setAttribute('aria-label', 'Cerrar sesión');
+    btn.setAttribute('title', 'Cerrar sesión');
+  }
+}
 
 // Verificar autenticación
 function checkAuth() {
@@ -405,6 +431,17 @@ function checkAuth() {
       window.location.href = 'login.html';
     });
   }
+}
+
+function persistSession(data, fallbackUsername, asGuest = false) {
+  localStorage.setItem('authToken', data.token);
+  if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+  localStorage.setItem('username', data.username || fallbackUsername || 'invitado');
+  const role = data.role || 'user';
+  localStorage.setItem('role', role);
+  if (asGuest) localStorage.setItem('isGuest', '1');
+  else localStorage.removeItem('isGuest');
+  return role;
 }
 
 // Función de login usando backend
@@ -449,11 +486,7 @@ async function login() {
     }
 
     // Login exitoso
-    localStorage.setItem('authToken', data.token);
-    if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-    localStorage.setItem('username', data.username || identifier);
-    const role = data.role || 'user';
-    localStorage.setItem('role', role);
+    const role = persistSession(data, identifier);
 
     Swal.fire({
       icon: 'success',
@@ -474,6 +507,43 @@ async function login() {
     });
   } finally {
     setButtonLoading('loginBtn', false);
+  }
+}
+
+// Entrar sin cuenta registrada e ir directo al catálogo
+async function loginAsGuest() {
+  setButtonLoading('guestLoginBtn', true);
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/guest-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'No se pudo iniciar como invitado',
+        text: data.error,
+        confirmButtonColor: '#3085d6'
+      });
+      return;
+    }
+
+    persistSession(data, 'invitado', true);
+    window.location.href = 'dashboard.html';
+  } catch (error) {
+    console.error('Error en login de invitado:', error);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'No se pudo conectar con el servidor',
+      confirmButtonColor: '#3085d6'
+    });
+  } finally {
+    setButtonLoading('guestLoginBtn', false);
   }
 }
 
@@ -559,14 +629,15 @@ async function register() {
 }
 
 function logout() {
+  const guest = isGuestSession();
   Swal.fire({
-    title: '¿Cerrar sesión?',
-    text: '¿Estás seguro de que quieres salir?',
+    title: guest ? '¿Salir?' : '¿Cerrar sesión?',
+    text: guest ? '¿Quieres salir del modo invitado?' : '¿Estás seguro de que quieres salir?',
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#3085d6',
     cancelButtonColor: '#6c757d',
-    confirmButtonText: 'Sí, cerrar sesión',
+    confirmButtonText: guest ? 'Sí, salir' : 'Sí, cerrar sesión',
     cancelButtonText: 'Cancelar'
   }).then((result) => {
     if (result.isConfirmed) {
@@ -575,6 +646,12 @@ function logout() {
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('username');
       localStorage.removeItem('role');
+      localStorage.removeItem('isGuest');
+
+      if (guest) {
+        window.location.href = 'index.html';
+        return;
+      }
 
       Swal.fire({
         icon: 'success',
@@ -702,6 +779,66 @@ function actualizarContadorCarrito() {
   counter.classList.add('cart-bump');
 }
 
+function segundosRestantesPago() {
+  return Math.max(0, Math.ceil((pagoDeadline - Date.now()) / 1000));
+}
+
+function formatoTiempoPago(segundos) {
+  const minutos = Math.floor(segundos / 60);
+  const resto = segundos % 60;
+  return `${minutos}:${String(resto).padStart(2, '0')}`;
+}
+
+function pintarCronometroPago() {
+  const activo = Boolean(pagoTimerId);
+  const left = activo ? segundosRestantesPago() : 0;
+  const texto = formatoTiempoPago(left);
+  document.querySelectorAll('[data-pago-timer]').forEach(node => {
+    node.hidden = !activo;
+    if (!activo) return;
+    const num = node.querySelector('[data-pago-segundos]');
+    if (num && num.textContent !== texto) num.textContent = texto;
+    node.classList.toggle('pago-timer-urgente', left > 0 && left <= 60);
+  });
+}
+
+function detenerCronometroPago() {
+  if (pagoTimerId) {
+    clearInterval(pagoTimerId);
+    pagoTimerId = null;
+  }
+  pagoDeadline = 0;
+  pintarCronometroPago();
+}
+
+function iniciarCronometroPago() {
+  if (pagoTimerId || pagoEnCurso || carrito.length === 0) return;
+  pagoDeadline = Date.now() + PAGO_SEGUNDOS * 1000;
+  pagoTimerId = setInterval(() => {
+    const left = segundosRestantesPago();
+    pintarCronometroPago();
+    if (left <= 0) vaciarCarritoPorTiempo();
+  }, 250);
+  pintarCronometroPago();
+}
+
+function vaciarCarritoPorTiempo() {
+  if (pagoEnCurso) return;
+  detenerCronometroPago();
+  carrito = [];
+  metodoPagoSeleccionado = null;
+  localStorage.removeItem('mundoPetsCart');
+  actualizarContadorCarrito();
+  closeModal('cartModal');
+  closeModal('checkoutModal');
+  Swal.fire({
+    icon: 'warning',
+    title: 'Tiempo agotado',
+    text: 'Pasaron 30 minutos sin confirmar el pago. El carrito se vació.',
+    confirmButtonColor: '#0e7c7b'
+  });
+}
+
 function showCart() {
   const cartItems = document.getElementById('cartItems');
   const cartTotal = document.getElementById('cartTotal');
@@ -751,8 +888,10 @@ function showCart() {
 
     cartItems.innerHTML = itemsHTML;
     cartTotal.textContent = total.toLocaleString();
+    iniciarCronometroPago();
   }
 
+  if (carrito.length === 0) detenerCronometroPago();
   openModal('cartModal');
 }
 
@@ -819,6 +958,8 @@ function checkout() {
   `;
 
   checkoutSummary.innerHTML = summaryHTML;
+  iniciarCronometroPago();
+  pintarCronometroPago();
   openModal('checkoutModal');
 }
 
@@ -844,6 +985,9 @@ async function processPayment() {
     });
     return;
   }
+
+  pagoEnCurso = true;
+  detenerCronometroPago();
 
   const total = carrito.reduce((total, item) => total + (item.precio * item.cantidad), 0);
 
@@ -892,6 +1036,7 @@ async function processPayment() {
       window.location.href = 'dashboard.html';
     });
   } catch (error) {
+    pagoEnCurso = false;
     Swal.close();
     Swal.fire({
       icon: 'error',

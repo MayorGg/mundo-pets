@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="dist/tailwind.css?v=3" />
+  <link rel="stylesheet" href="dist/tailwind.css?v=8" />
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
@@ -58,9 +58,15 @@
                 <p id="password-err" class="mt-1.5 hidden text-sm font-medium text-danger"></p>
               </div>
 
-              <div class="mb-4">
+              <div class="mb-3">
                 <button type="button" id="loginBtn" onclick="login()" class="btn-brand w-full px-6 py-3 text-base">
                   <i class="fas fa-sign-in-alt"></i>Entrar
+                </button>
+              </div>
+
+              <div class="mb-4">
+                <button type="button" id="guestLoginBtn" onclick="loginAsGuest()" class="btn-brand-outline w-full px-6 py-3 text-base">
+                  <i class="fas fa-user"></i>Iniciar como invitado
                 </button>
               </div>
 
@@ -83,6 +89,6 @@
     </div>
   </div>
 
-  <script src="script.js?v=4"></script>
+  <script src="script.js?v=7"></script>
 </body>
 </html>
